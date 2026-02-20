@@ -7,11 +7,6 @@ function toApiUrl(input: string) {
   return `${API_BASE}${input.startsWith("/") ? "" : "/"}${input}`;
 }
 
-function getAuthHeaders() {
-  const token = window.localStorage.getItem("calshi_session_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -26,10 +21,7 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(toApiUrl(url), {
     method,
-    headers: {
-      ...(data ? { "Content-Type": "application/json" } : {}),
-      ...getAuthHeaders(),
-    },
+    headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -45,10 +37,7 @@ export const getQueryFn: <T>(options: {
   ({ on401 }) =>
   async ({ queryKey }) => {
     const url = toApiUrl(queryKey.join("/") as string);
-    const res = await fetch(url, {
-      credentials: "include",
-      headers: { ...getAuthHeaders() },
-    });
+    const res = await fetch(url, { credentials: "include" });
 
     if (on401 === "returnNull" && res.status === 401) return null as any;
 

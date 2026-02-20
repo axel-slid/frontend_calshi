@@ -55,11 +55,6 @@ export default function AuthPage() {
 
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
-      // Persist JWT so the app works even if third‑party cookies are blocked.
-      if (data?.sessionToken) {
-        window.localStorage.setItem("calshi_session_token", data.sessionToken);
-      }
-
       toast({ title: "Welcome!", description: "You're ready to trade." });
       setLocation("/");
     } catch (e: any) {
