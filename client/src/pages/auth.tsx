@@ -39,25 +39,30 @@ export default function AuthPage() {
   }
 
   async function handleCompleteProfile() {
-    const trimmedUsername = username.trim();
+  const trimmedUsername = username.trim();
 
-    if (!email.toLowerCase().endsWith("@berkeley.edu")) {
-      toast({
-        title: "Access Denied",
-        description: "You must use a Berkeley @berkeley.edu email to join.",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!email.toLowerCase().endsWith("@berkeley.edu")) {
+    toast({
+      title: "Access Denied",
+      description: "You must use a Berkeley @berkeley.edu email to join.",
+      variant: "destructive",
+    });
+    return;
+  }
 
-    if (trimmedUsername.length < 3) {
-      toast({
-        title: "Invalid Username",
-        description: "Username must be at least 3 characters.",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (trimmedUsername.length < 3) {
+    toast({
+      title: "Invalid Username",
+      description: "Username must be at least 3 characters.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  // Optional: persist username later. For now, don't block redirect on it.
+  toast({ title: "Welcome!", description: "You're ready to trade." });
+  setLocation("/");
+} 
 
     setIsSubmitting(true);
     try {
