@@ -1,13 +1,9 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE ??
-  "https://backendcalshi-production.up.railway.app";
+const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? "https://backendcalshi-production.up.railway.app";
 
 function toApiUrl(input: string) {
-  // Keep absolute URLs as-is
   if (input.startsWith("http://") || input.startsWith("https://")) return input;
-  // Prefix relative paths with API_BASE
   return `${API_BASE}${input.startsWith("/") ? "" : "/"}${input}`;
 }
 
@@ -21,7 +17,7 @@ async function throwIfResNotOk(res: Response) {
 export async function apiRequest(
   method: string,
   url: string,
-  data?: unknown | undefined,
+  data?: unknown,
 ): Promise<Response> {
   const res = await fetch(toApiUrl(url), {
     method,
@@ -38,17 +34,12 @@ type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
-  ({ on401: unauthorizedBehavior }) =>
+  ({ on401 }) =>
   async ({ queryKey }) => {
     const url = toApiUrl(queryKey.join("/") as string);
+    const res = await fetch(url, { credentials: "include" });
 
-    const res = await fetch(url, {
-      credentials: "include",
-    });
-
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null as any;
-    }
+    if (on401 === "returnNull" && res.status === 401) return null as any;
 
     await throwIfResNotOk(res);
     return await res.json();
@@ -60,11 +51,9 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: 30_000,
       retry: false,
     },
-    mutations: {
-      retry: false,
-    },
+    mutations: { retry: false },
   },
 });

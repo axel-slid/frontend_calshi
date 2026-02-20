@@ -12,7 +12,7 @@ export default function NotFound() {
           </div>
 
           <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
+            brotherrrrr you can't access this page!! go to the home page and try again or something idk 
           </p>
         </CardContent>
       </Card>

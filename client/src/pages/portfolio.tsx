@@ -1,68 +1,125 @@
 import { useMemo } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { 
-  ArrowLeft, 
-  TrendingUp, 
-  History, 
-  Wallet, 
-  ArrowUpRight, 
+import {
+  ArrowLeft,
+  TrendingUp,
+  History,
+  ArrowUpRight,
   ArrowDownRight,
   Clock,
-  ExternalLink
+  ExternalLink,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useQuery } from "@tanstack/react-query";
+import { getQueryFn } from "@/lib/queryClient";
+
+type ApiMeResponse = { user: { id: string; email: string; username?: string | null; credits: number } };
+type ApiTradesResponse = { trades: ApiTrade[] };
+type ApiMarketsResponse = { markets: ApiMarket[] };
+
+type ApiTrade = {
+  id: string;
+  market_id: string;
+  side: "YES" | "NO";
+  amount: number;
+  created_at: string;
+};
+
+type ApiMarket = {
+  id: string;
+  question: string;
+  status: string | null;
+  created_at: string | null;
+  volume: number;
+};
 
 type Position = {
-  id: string;
+  id: string; // `${market_id}:${side}`
   marketTitle: string;
-  side: "YES" | "NO" | "OVER" | "UNDER";
-  amount: number;
-  initialPrice: number;
-  currentPrice: number;
-  pnl: number;
+  side: "YES" | "NO";
+  amount: number; // total staked on this side
 };
-
-type Transaction = {
-  id: string;
-  type: "trade" | "referral" | "daily_bonus";
-  amount: number;
-  description: string;
-  timestamp: string;
-};
-
-const mockPositions: Position[] = [
-  {
-    id: "p1",
-    marketTitle: "Who teaches UGBA 202B next semester?",
-    side: "YES",
-    amount: 250,
-    initialPrice: 0.52,
-    currentPrice: 0.57,
-    pnl: 12.5,
-  },
-  {
-    id: "p2",
-    marketTitle: "Cal vs Stanford win probability",
-    side: "NO",
-    amount: 100,
-    initialPrice: 0.45,
-    currentPrice: 0.39,
-    pnl: 6.0,
-  }
-];
-
-const mockTransactions: Transaction[] = [
-  { id: "t1", type: "trade", amount: -250, description: "Bought YES on UGBA 202B", timestamp: "2 hours ago" },
-  { id: "t2", type: "referral", amount: 100, description: "Friend joined via code", timestamp: "5 hours ago" },
-  { id: "t3", type: "daily_bonus", amount: 1000, description: "Initial sign-up tokens", timestamp: "1 day ago" },
-];
 
 export default function PortfolioPage() {
-  const totalPnL = useMemo(() => mockPositions.reduce((acc, p) => acc + p.pnl, 0), []);
+  const [, setLocation] = useLocation();
+
+  const meQuery = useQuery<ApiMeResponse>({
+    queryKey: ["/me"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const tradesQuery = useQuery<ApiTradesResponse>({
+    queryKey: ["/trades"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const marketsQuery = useQuery<ApiMarketsResponse>({
+    queryKey: ["/markets"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const credits = Number(meQuery.data?.user?.credits ?? 0);
+  const trades = tradesQuery.data?.trades ?? [];
+  const markets = marketsQuery.data?.markets ?? [];
+
+  const marketTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const mk of markets) {
+      m.set(mk.id, mk.question || mk.id);
+    }
+    return m;
+  }, [markets]);
+
+  // Active stake = total tokens spent in trades
+  const activeStake = useMemo(() => {
+    return trades.reduce((acc, t) => acc + Number(t.amount ?? 0), 0);
+  }, [trades]);
+
+  // Positions = aggregate by (market_id, side)
+  const positions: Position[] = useMemo(() => {
+    const agg = new Map<string, Position>();
+
+    for (const t of trades) {
+      const key = `${t.market_id}:${t.side}`;
+      const title = marketTitleById.get(t.market_id) ?? t.market_id;
+
+      const existing = agg.get(key);
+      if (existing) {
+        existing.amount += Number(t.amount ?? 0);
+      } else {
+        agg.set(key, {
+          id: key,
+          marketTitle: title,
+          side: t.side,
+          amount: Number(t.amount ?? 0),
+        });
+      }
+    }
+
+    // Most-staked first
+    return Array.from(agg.values()).sort((a, b) => b.amount - a.amount);
+  }, [trades, marketTitleById]);
+
+  // Pricing/settlement isn't in your schema yet; keep P/L as 0 for now.
+  const totalPnL = 0;
+
+  // Pretty timestamp helper
+  function formatTime(ts: string) {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return ts;
+    return d.toLocaleString();
+  }
+
+  // If unauthorized, send to /auth
+  if (meQuery.isError) {
+    // 401 will be thrown by getQueryFn; simplest UX: redirect to auth
+    // (avoid infinite loops if auth itself calls /me in future)
+    setTimeout(() => setLocation("/auth"), 0);
+  }
 
   return (
     <div className="min-h-screen bg-background berkeley-gradient">
@@ -75,10 +132,12 @@ export default function PortfolioPage() {
             </Button>
           </Link>
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 bg-accent text-accent-foreground rounded flex items-center justify-center font-black">C</div>
+            <div className="h-8 w-8 bg-accent text-accent-foreground rounded flex items-center justify-center font-black">
+              C
+            </div>
             <span className="font-black uppercase tracking-tighter">Portfolio</span>
           </div>
-          <div className="w-24"></div> {/* Spacer */}
+          <div className="w-24"></div>
         </div>
       </header>
 
@@ -88,17 +147,21 @@ export default function PortfolioPage() {
             <div className="flex flex-col gap-1">
               <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Available Balance</span>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black">1,118.5</span>
+                <span className="text-3xl font-black">
+                  {meQuery.isLoading ? "—" : credits.toLocaleString()}
+                </span>
                 <span className="text-xs font-mono text-accent">TOKENS</span>
               </div>
             </div>
           </Card>
-          
+
           <Card className="frost noise p-6">
             <div className="flex flex-col gap-1">
               <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Active Stake</span>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black">350</span>
+                <span className="text-3xl font-black">
+                  {tradesQuery.isLoading ? "—" : activeStake.toLocaleString()}
+                </span>
                 <span className="text-xs font-mono text-muted-foreground">TOKENS</span>
               </div>
             </div>
@@ -109,10 +172,14 @@ export default function PortfolioPage() {
               <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Total P/L</span>
               <div className="flex items-baseline gap-2">
                 <span className={`text-3xl font-black ${totalPnL >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  {totalPnL >= 0 ? "+" : ""}{totalPnL}
+                  {totalPnL >= 0 ? "+" : ""}
+                  {totalPnL.toLocaleString()}
                 </span>
                 <span className="text-xs font-mono text-muted-foreground">TOKENS</span>
               </div>
+              <p className="mt-2 text-[10px] text-muted-foreground uppercase tracking-widest">
+                P/L requires live pricing & settlement (not in schema yet)
+              </p>
             </div>
           </Card>
         </div>
@@ -130,59 +197,94 @@ export default function PortfolioPage() {
           </TabsList>
 
           <TabsContent value="holdings" className="space-y-4">
-            {mockPositions.map(pos => (
-              <Card key={pos.id} className="frost noise p-6 group hover:border-accent/30 transition-colors">
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-lg group-hover:text-accent transition-colors">{pos.marketTitle}</h3>
-                    <div className="flex gap-2 items-center">
-                      <Badge variant="outline" className={`${pos.side === 'YES' || pos.side === 'OVER' ? 'border-primary text-primary-foreground bg-primary/20' : 'border-destructive text-destructive'}`}>
-                        {pos.side}
-                      </Badge>
-                      <span className="text-xs font-mono text-muted-foreground">Bought at {pos.initialPrice} • Current {pos.currentPrice}</span>
+            {tradesQuery.isLoading || marketsQuery.isLoading ? (
+              <Card className="frost noise p-6">Loading holdings…</Card>
+            ) : positions.length === 0 ? (
+              <Card className="frost noise p-6">No holdings yet. Place a trade to get started.</Card>
+            ) : (
+              positions.map((pos) => (
+                <Card key={pos.id} className="frost noise p-6 group hover:border-accent/30 transition-colors">
+                  <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                    <div className="space-y-1">
+                      <h3 className="font-bold text-lg group-hover:text-accent transition-colors">{pos.marketTitle}</h3>
+                      <div className="flex gap-2 items-center">
+                        <Badge
+                          variant="outline"
+                          className={
+                            pos.side === "YES"
+                              ? "border-primary text-primary-foreground bg-primary/20"
+                              : "border-destructive text-destructive"
+                          }
+                        >
+                          {pos.side}
+                        </Badge>
+                        <span className="text-xs font-mono text-muted-foreground">
+                          Total staked: {pos.amount.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-8 border-t md:border-t-0 pt-4 md:pt-0 border-border">
+                      <div className="text-right">
+                        <p className="text-xs font-mono text-muted-foreground uppercase">Stake</p>
+                        <p className="font-bold">{pos.amount.toLocaleString()} tokens</p>
+                      </div>
+
+                      {/* placeholder for future P/L */}
+                      <div className="text-right">
+                        <p className="text-xs font-mono text-muted-foreground uppercase">Profit/Loss</p>
+                        <p className="font-black text-muted-foreground">—</p>
+                      </div>
+
+                      <Button size="icon" variant="ghost" className="hidden md:flex" disabled>
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-8 border-t md:border-t-0 pt-4 md:pt-0 border-border">
-                    <div className="text-right">
-                      <p className="text-xs font-mono text-muted-foreground uppercase">Stake</p>
-                      <p className="font-bold">{pos.amount} tokens</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono text-muted-foreground uppercase">Profit/Loss</p>
-                      <p className={`font-black ${pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {pos.pnl >= 0 ? '+' : ''}{pos.pnl}
-                      </p>
-                    </div>
-                    <Button size="icon" variant="ghost" className="hidden md:flex">
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              ))
+            )}
           </TabsContent>
 
           <TabsContent value="history">
             <Card className="frost noise overflow-hidden">
               <div className="divide-y divide-border">
-                {mockTransactions.map(tx => (
-                  <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className={`h-10 w-10 rounded-full flex items-center justify-center ${tx.amount > 0 ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'}`}>
-                        {tx.amount > 0 ? <ArrowDownRight className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
+                {tradesQuery.isLoading || marketsQuery.isLoading ? (
+                  <div className="p-4">Loading history…</div>
+                ) : trades.length === 0 ? (
+                  <div className="p-4">No trades yet.</div>
+                ) : (
+                  trades.map((tx) => {
+                    const title = marketTitleById.get(tx.market_id) ?? tx.market_id;
+                    const amount = Number(tx.amount ?? 0);
+                    const isDebit = amount > 0; // trading spends tokens
+                    return (
+                      <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                        <div className="flex items-center gap-4">
+                          <div
+                            className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                              isDebit ? "bg-red-400/10 text-red-400" : "bg-green-400/10 text-green-400"
+                            }`}
+                          >
+                            {isDebit ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                          </div>
+                          <div>
+                            <p className="font-bold">
+                              Bought {tx.side} • {title}
+                            </p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> {formatTime(tx.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`font-mono font-bold ${isDebit ? "text-red-400" : "text-green-400"}`}>
+                          {isDebit ? "-" : "+"}
+                          {amount.toLocaleString()}
+                        </span>
                       </div>
-                      <div>
-                        <p className="font-bold">{tx.description}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> {tx.timestamp}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`font-mono font-bold ${tx.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+                    );
+                  })
+                )}
               </div>
             </Card>
           </TabsContent>

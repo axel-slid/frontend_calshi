@@ -7,47 +7,74 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GraduationCap, ShieldCheck, Mail } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleGoogleLogin() {
-    // In a real app, this would redirect to Google OAuth
-    // For the mockup, we simulate the flow
+    // Still mocked: move to step 2
     setStep(2);
     toast({ title: "Google Auth Successful", description: "Now, choose your campus handle." });
   }
 
-  function handleCompleteProfile() {
-    if (!email.endsWith(".edu") && !email.includes("berkeley")) {
-      toast({ 
-        title: "Access Denied", 
+  async function handleCompleteProfile() {
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedUsername = username.trim();
+
+    if (!trimmedEmail.endsWith(".edu") && !trimmedEmail.includes("berkeley")) {
+      toast({
+        title: "Access Denied",
         description: "You must use a Berkeley .edu email to join the competition.",
-        variant: "destructive" 
+        variant: "destructive",
       });
       return;
     }
-    if (username.length < 3) {
-      toast({ title: "Invalid Username", description: "Username must be at least 3 characters.", variant: "destructive" });
+
+    if (trimmedUsername.length < 3) {
+      toast({
+        title: "Invalid Username",
+        description: "Username must be at least 3 characters.",
+        variant: "destructive",
+      });
       return;
     }
 
-    // Simulate saving to state/backend
-    localStorage.setItem("calshi_user", JSON.stringify({ email, username, tokens: 1000 }));
-    toast({ title: "Welcome to Calshi!", description: "1,000 tokens have been credited to your account." });
-    setLocation("/");
+    setIsSubmitting(true);
+    try {
+      // This creates a server session cookie (credentials: include is handled in apiRequest)
+      await apiRequest("POST", "/auth/dev", {
+        email: trimmedEmail,
+        username: trimmedUsername,
+      });
+
+      toast({
+        title: "Welcome to Calshi!",
+        description: "You're signed in and ready to trade.",
+      });
+
+      // go home; Home page should call /me to display credits
+      setLocation("/");
+    } catch (e: any) {
+      // apiRequest throws `${status}: ${text}`
+      const message = typeof e?.message === "string" ? e.message : "Could not sign in.";
+      toast({
+        title: "Sign-in failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <div className="min-h-screen bg-background berkeley-gradient flex items-center justify-center p-6">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <Card className="frost noise p-8 border-accent/20">
           <div className="text-center mb-8">
             <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-accent text-accent-foreground font-serif text-4xl font-black mb-4">
@@ -65,8 +92,8 @@ export default function AuthPage() {
                   <strong>Berkeley Only:</strong> Sign-in requires a valid @berkeley.edu Google account. No purchase necessary.
                 </p>
               </div>
-              
-              <Button 
+
+              <Button
                 onClick={handleGoogleLogin}
                 className="w-full h-12 bg-white text-black hover:bg-gray-100 font-bold flex gap-3"
               >
@@ -80,12 +107,14 @@ export default function AuthPage() {
                 <Label htmlFor="email">Berkeley Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input 
+                  <Input
                     id="email"
-                    placeholder="oski@berkeley.edu" 
+                    placeholder="oski@berkeley.edu"
                     className="pl-10 h-12 bg-card/50"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    disabled={isSubmitting}
+                    autoComplete="email"
                   />
                 </div>
               </div>
@@ -94,27 +123,32 @@ export default function AuthPage() {
                 <Label htmlFor="username">Campus Username</Label>
                 <div className="relative">
                   <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input 
+                  <Input
                     id="username"
-                    placeholder="bear_trader_99" 
+                    placeholder="bear_trader_99"
                     className="pl-10 h-12 bg-card/50"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    disabled={isSubmitting}
+                    autoComplete="username"
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">This is how you'll appear on leaderboards</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">
+                  This is how you'll appear on leaderboards
+                </p>
               </div>
 
-              <Button 
+              <Button
                 onClick={handleCompleteProfile}
                 className="w-full h-12 bg-accent text-accent-foreground font-bold"
+                disabled={isSubmitting}
               >
-                Enter Competition
+                {isSubmitting ? "Signing in..." : "Enter Competition"}
               </Button>
             </div>
           )}
         </Card>
-        
+
         <p className="mt-8 text-center text-xs text-muted-foreground uppercase tracking-[0.2em]">
           By joining, you agree to the weekly tournament rules.
         </p>
