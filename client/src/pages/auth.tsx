@@ -64,11 +64,21 @@ export default function AuthPage() {
       toast({ title: "Welcome!", description: "Username saved. You're ready to trade." });
       setLocation("/");
     } catch (e: any) {
-      toast({
-        title: "Could not save username",
-        description: e?.message ?? "Try again.",
-        variant: "destructive",
-      });
+  let msg = e?.message ?? "Try again.";
+
+  // If apiRequest throws, it often includes response text; handle both cases
+  try {
+    if (e?.response) {
+      const data = await e.response.json();
+      msg = data?.error ?? msg;
+    }
+  } catch {}
+
+  toast({
+    title: "Could not save username",
+    description: msg,
+    variant: "destructive",
+  });
     } finally {
       setIsSubmitting(false);
     }
