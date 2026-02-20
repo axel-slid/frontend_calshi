@@ -11,13 +11,10 @@ import { GoogleLogin } from "@react-oauth/google";
 
 /**
  * IMPORTANT:
- * We must POST /auth/complete to the BACKEND origin.
- * If you call "/auth/complete" as a relative path, it hits https://www.calshi.app/auth/complete (Vercel)
- * which returns: "Cannot POST /auth/complete".
+ * We must POST to the BACKEND origin.
  */
 const DEFAULT_API_BASE = "https://backendcalshi-production.up.railway.app";
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE?.toString()?.trim() || DEFAULT_API_BASE;
+const API_BASE = (import.meta as any).env?.VITE_API_BASE?.toString()?.trim() || DEFAULT_API_BASE;
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
@@ -27,7 +24,66 @@ export default function AuthPage() {
   const [username, setUsername] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const googleAuthed = Boolean(idToken);
+  // NEW: only show username form when backend says it's needed
+  const [needsUsername, setNeedsUsername] = useState(false);
+
+  async function finishLoginAndEnter(data: any) {
+    if (data?.sessionToken) {
+      window.localStorage.setItem("calshi_session_token", data.sessionToken);
+    }
+    toast({ title: "Welcome!", description: "You're ready to trade." });
+    setLocation("/");
+  }
+
+  async function handleGoogleToken(token: string) {
+    setIsSubmitting(true);
+    try {
+      // 1) Ask backend if this user already exists / can be signed in
+      const res = await fetch(`${API_BASE}/auth/google`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: token }),
+      });
+
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {}
+
+      if (!res.ok) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+
+      const serverEmail = (data?.user?.email ?? "").toString();
+      const serverUsername = (data?.user?.username ?? "").toString().trim();
+
+      // UX: show actual email from server (not "Signed in with Google")
+      setEmail(serverEmail || "Signed in with Google");
+
+      // If username already exists -> let them in immediately
+      if (serverUsername.length > 0) {
+        await finishLoginAndEnter(data);
+        return;
+      }
+
+      // Otherwise: store token + show username step
+      setIdToken(token);
+      setNeedsUsername(true);
+      toast({
+        title: "Almost there",
+        description: "Choose a username to finish signup.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Sign-in failed",
+        description: e?.message ?? "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   async function handleEnter() {
     const trimmedUsername = username.trim();
@@ -52,10 +108,6 @@ export default function AuthPage() {
 
     setIsSubmitting(true);
     try {
-      
-      console.log("idToken length:", idToken?.length, "username:", trimmedUsername);
-      
-      // ✅ Force absolute URL to backend
       const res = await fetch(`${API_BASE}/auth/complete`, {
         method: "POST",
         credentials: "include",
@@ -73,13 +125,7 @@ export default function AuthPage() {
 
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
-      // Persist JWT so the app works even if third-party cookies are blocked.
-      if (data?.sessionToken) {
-        window.localStorage.setItem("calshi_session_token", data.sessionToken);
-      }
-
-      toast({ title: "Welcome!", description: "You're ready to trade." });
-      setLocation("/");
+      await finishLoginAndEnter(data);
     } catch (e: any) {
       toast({
         title: "Could not finish sign up",
@@ -93,35 +139,25 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-background berkeley-gradient flex items-center justify-center p-6">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <Card className="frost noise p-8 border-accent/20">
           <div className="text-center mb-8">
             <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-accent text-accent-foreground font-serif text-4xl font-black mb-4">
               C
             </div>
-            <h1 className="text-3xl font-serif font-bold mb-2">
-              Join the Forecast
-            </h1>
-            <p className="text-muted-foreground">
-              Berkeley-exclusive prediction competition
-            </p>
+            <h1 className="text-3xl font-serif font-bold mb-2">Join the Forecast</h1>
+            <p className="text-muted-foreground">Berkeley-exclusive prediction competition</p>
           </div>
 
           <div className="space-y-6">
             <div className="rounded-xl border border-accent/20 bg-accent/5 p-4 flex gap-3 items-start">
               <ShieldCheck className="h-5 w-5 text-accent shrink-0 mt-0.5" />
               <p className="text-xs text-accent/90 leading-relaxed">
-                <strong>Berkeley Only:</strong> Sign-in requires a valid
-                {" "}
-                @berkeley.edu Google account.
+                <strong>Berkeley Only:</strong> Sign-in requires a valid @berkeley.edu Google account.
               </p>
             </div>
 
-            {!googleAuthed ? (
+            {!needsUsername ? (
               <div className="flex justify-center">
                 <GoogleLogin
                   onSuccess={(cred) => {
@@ -134,15 +170,8 @@ export default function AuthPage() {
                       });
                       return;
                     }
-
-                    setIdToken(token);
-
-                    // purely UX
-                    setEmail("Signed in with Google");
-                    toast({
-                      title: "Google sign-in complete",
-                      description: "Now choose a username.",
-                    });
+                    // ✅ NEW: call backend immediately
+                    handleGoogleToken(token);
                   }}
                   onError={() => {
                     toast({
@@ -160,12 +189,7 @@ export default function AuthPage() {
                   <Label htmlFor="email">Berkeley Email</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      className="pl-10 h-12 bg-card/50"
-                      value={email}
-                      disabled
-                    />
+                    <Input id="email" className="pl-10 h-12 bg-card/50" value={email} disabled />
                   </div>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">
                     Verified on the server on submit
@@ -196,9 +220,6 @@ export default function AuthPage() {
                 >
                   {isSubmitting ? "Saving..." : "Enter Competition"}
                 </Button>
-
-                {/* Optional: show which API base you’re using (helps debugging) */}
-                {/* <p className="text-[10px] text-muted-foreground">API: {API_BASE}</p> */}
               </>
             )}
           </div>
