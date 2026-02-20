@@ -12,7 +12,6 @@ import { GoogleLogin } from "@react-oauth/google";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
-
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [step, setStep] = useState<1 | 2>(1);
@@ -20,7 +19,6 @@ export default function AuthPage() {
 
   async function handleGoogleSuccess(idToken: string) {
     try {
-      // Exchange Google ID token for your app session cookie
       const res = await apiRequest("POST", "/auth/google", { idToken });
       const body = await res.json();
 
@@ -39,38 +37,31 @@ export default function AuthPage() {
   }
 
   async function handleCompleteProfile() {
-  const trimmedUsername = username.trim();
+    const trimmedUsername = username.trim();
 
-  if (!email.toLowerCase().endsWith("@berkeley.edu")) {
-    toast({
-      title: "Access Denied",
-      description: "You must use a Berkeley @berkeley.edu email to join.",
-      variant: "destructive",
-    });
-    return;
-  }
+    if (!email.toLowerCase().endsWith("@berkeley.edu")) {
+      toast({
+        title: "Access Denied",
+        description: "You must use a Berkeley @berkeley.edu email to join.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  if (trimmedUsername.length < 3) {
-    toast({
-      title: "Invalid Username",
-      description: "Username must be at least 3 characters.",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  // Optional: persist username later. For now, don't block redirect on it.
-  toast({ title: "Welcome!", description: "You're ready to trade." });
-  setLocation("/");
-} 
+    if (trimmedUsername.length < 3) {
+      toast({
+        title: "Invalid Username",
+        description: "Username must be at least 3 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      // Optional: only if you implement this endpoint on backend.
-      // If you don't want usernames stored yet, delete this call and just redirect.
       await apiRequest("POST", "/me/username", { username: trimmedUsername });
 
-      toast({ title: "Welcome!", description: "You're ready to trade." });
+      toast({ title: "Welcome!", description: "Username saved. You're ready to trade." });
       setLocation("/");
     } catch (e: any) {
       toast({
@@ -135,17 +126,8 @@ export default function AuthPage() {
                 <Label htmlFor="email">Berkeley Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    placeholder="oski@berkeley.edu"
-                    className="pl-10 h-12 bg-card/50"
-                    value={email}
-                    disabled
-                  />
+                  <Input id="email" className="pl-10 h-12 bg-card/50" value={email} disabled />
                 </div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">
-                  Locked to your Google account
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -168,6 +150,7 @@ export default function AuthPage() {
               </div>
 
               <Button
+                type="button"
                 onClick={handleCompleteProfile}
                 className="w-full h-12 bg-accent text-accent-foreground font-bold"
                 disabled={isSubmitting}
