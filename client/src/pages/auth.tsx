@@ -48,7 +48,7 @@ export default function AuthPage() {
       return;
     }
 
-   if (trimmedUsername.length < 3) {
+if (trimmedUsername.length < 3) {
   toast({
     title: "Invalid Username",
     description: "Username must be at least 3 characters.",
@@ -84,7 +84,8 @@ try {
   });
 } finally {
   setIsSubmitting(false);
-} 
+}
+  }
 
   return (
     <div className="min-h-screen bg-background berkeley-gradient flex items-center justify-center p-6">
