@@ -51,10 +51,8 @@ type ApiMarketRow = {
   status: string | null;
   created_at: string | null;
 
-  // backend may provide volume even if DB doesn't have it
   volume?: number | string | null;
 
-  // DB/API fields
   yes_price?: number | string | null;
   no_price?: number | string | null;
   rules?: string | null;
@@ -236,10 +234,84 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
-// Choose a reasonable default stake based on current balance
 function defaultStake(balance: number) {
   if (!Number.isFinite(balance) || balance <= 0) return 50;
   return clampInt(Math.round(balance * 0.05), 10, Math.min(500, Math.floor(balance)));
+}
+
+// Core UX math:
+// Spend `stake` tokens at price `p` (0..1) => shares = stake / p.
+// If outcome wins => payout = shares * 1 token/share.
+function calcPayout(stake: number, price: number) {
+  const p = Number(price);
+  const s = Number(stake);
+  if (!Number.isFinite(p) || p <= 0) return null;
+  if (!Number.isFinite(s) || s <= 0) return null;
+  return s / p;
+}
+
+function formatInt(n: number) {
+  return Math.max(0, Math.floor(n)).toLocaleString();
+}
+
+function TradeButton({
+  label,
+  price,
+  stake,
+  variant,
+  disabled,
+  onClick,
+}: {
+  label: "YES" | "NO";
+  price: number;
+  stake: number;
+  variant: "yes" | "no";
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const cents = Math.round(clamp01(price) * 100);
+  const payout = calcPayout(stake, price);
+  const profit = payout == null ? null : payout - stake;
+
+  const primaryClasses =
+    variant === "yes"
+      ? "bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20"
+      : "border-border hover:bg-secondary text-foreground";
+
+  return (
+    <Button
+      className={`py-7 rounded-2xl text-lg font-black ${primaryClasses}`}
+      variant={variant === "yes" ? undefined : "outline"}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <div className="flex flex-col items-center leading-none">
+        {/* Top line: outcome + price */}
+        <div className="flex items-baseline gap-2">
+          <span className="text-lg">{label}</span>
+          <span className={variant === "yes" ? "text-white/80 text-sm font-extrabold" : "text-muted-foreground text-sm font-extrabold"}>
+            {cents}¢
+          </span>
+        </div>
+
+        {/* Bottom line: what stake becomes if correct */}
+        <div className={variant === "yes" ? "mt-2 text-[11px] font-extrabold text-white/85" : "mt-2 text-[11px] font-extrabold text-muted-foreground"}>
+          {payout == null ? (
+            <>Set stake → Payout —</>
+          ) : (
+            <>
+              Stake {formatInt(stake)} → Payout {formatInt(payout)}
+              {profit != null && profit > 0 ? (
+                <span className={variant === "yes" ? "ml-2 text-white" : "ml-2 text-foreground"}>
+                  (+{formatInt(profit)})
+                </span>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+    </Button>
+  );
 }
 
 export default function Home() {
@@ -247,10 +319,9 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [showRules, setShowRules] = useState(false);
 
-  // Stake slider state (global stake used for all trades)
+  // Stake slider (global)
   const [stake, setStake] = useState(50);
 
-  // Auth/session user
   const meQuery = useQuery<ApiMeResponse>({
     queryKey: ["/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -261,15 +332,10 @@ export default function Home() {
   const signedIn = !!(meQuery.data as any)?.user;
   const tokens = Number((meQuery.data as any)?.user?.credits ?? 0);
 
-  // Set a nicer default stake once we know token balance (only once per balance load)
   useEffect(() => {
     if (!signedIn) return;
     if (!Number.isFinite(tokens) || tokens <= 0) return;
-    setStake((prev) => {
-      // if user already moved it away from default 50, don't override aggressively
-      if (prev !== 50) return prev;
-      return defaultStake(tokens);
-    });
+    setStake((prev) => (prev !== 50 ? prev : defaultStake(tokens)));
   }, [signedIn, tokens]);
 
   const username =
@@ -277,7 +343,6 @@ export default function Home() {
     ((meQuery.data as any)?.user?.email ?? "").toString().split("@")[0] ||
     "User";
 
-  // Invite code (requires backend /referrals/code)
   const inviteQuery = useQuery<ApiInviteCodeResponse>({
     queryKey: ["/referrals/code"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -288,7 +353,6 @@ export default function Home() {
 
   const inviteCode = ((inviteQuery.data as any)?.code ?? "").toString();
 
-  // Markets from backend
   const marketsQuery = useQuery<ApiMarketsResponse>({
     queryKey: ["/markets"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -300,7 +364,6 @@ export default function Home() {
     return rows.map(adaptApiMarket);
   }, [marketsQuery.data]);
 
-  // Stats
   const statsQuery = useQuery<ApiStatsResponse>({
     queryKey: ["/stats"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -310,7 +373,6 @@ export default function Home() {
   const activeTokensStaked = Number((statsQuery.data as any)?.activeTokensStaked ?? 0);
   const dailyForecasters = Number((statsQuery.data as any)?.dailyForecasters ?? 0);
 
-  // Leaderboard
   const leaderboardQuery = useQuery<ApiLeaderboardResponse>({
     queryKey: ["/leaderboard"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -330,7 +392,6 @@ export default function Home() {
     return markets.filter((m) => m.title.toLowerCase().includes(q));
   }, [search, markets]);
 
-  // Place trade
   const tradeMutation = useMutation({
     mutationFn: async (input: { marketId: string; side: "YES" | "NO"; amount: number }) => {
       const res = await apiRequest("POST", "/trades", input);
@@ -344,14 +405,11 @@ export default function Home() {
     },
   });
 
-  // Logout
   const logoutMutation = useMutation({
     mutationFn: async () => {
       try {
         await apiRequest("POST", "/auth/logout", {});
-      } catch {
-        // ignore
-      }
+      } catch {}
       window.localStorage.removeItem("calshi_session_token");
     },
     onSuccess: async () => {
@@ -367,6 +425,13 @@ export default function Home() {
     },
   });
 
+  const maxStakeForSlider = useMemo(() => {
+    if (!signedIn) return 500;
+    const t = Math.floor(tokens);
+    if (!Number.isFinite(t) || t <= 0) return 500;
+    return Math.max(10, t);
+  }, [signedIn, tokens]);
+
   async function handleTrade(marketId: string, side: "YES" | "NO") {
     if (!signedIn) {
       setLocation("/auth");
@@ -375,11 +440,6 @@ export default function Home() {
 
     const maxStake = Math.max(0, Math.floor(tokens));
     const amount = clampInt(stake, 1, Math.max(1, maxStake));
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast({ title: "Invalid stake", description: "Choose a stake greater than 0.", variant: "destructive" });
-      return;
-    }
 
     if (amount > tokens) {
       toast({
@@ -392,19 +452,12 @@ export default function Home() {
 
     try {
       await tradeMutation.mutateAsync({ marketId, side, amount });
-      toast({ title: "Trade placed", description: `Bought ${side} (${amount} tokens)` });
+      toast({ title: "Trade placed", description: `Bought ${side} (stake ${amount})` });
     } catch (e: any) {
       const msg = typeof e?.message === "string" ? e.message : "Could not place trade.";
       toast({ title: "Trade failed", description: msg, variant: "destructive" });
     }
   }
-
-  const maxStakeForSlider = useMemo(() => {
-    if (!signedIn) return 500;
-    const t = Math.floor(tokens);
-    if (!Number.isFinite(t) || t <= 0) return 500;
-    return Math.max(10, t);
-  }, [signedIn, tokens]);
 
   return (
     <div className="min-h-screen bg-background bg-grid">
@@ -529,7 +582,7 @@ export default function Home() {
           </motion.div>
         </section>
 
-        {/* Stake slider (global) */}
+        {/* Stake slider */}
         <section className="mb-10">
           <Card className="p-6 border-border rounded-[1.5rem] bg-secondary/20">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -544,7 +597,9 @@ export default function Home() {
               <div className="w-full md:max-w-md">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Stake</span>
-                  <span className="text-sm font-black text-foreground">{clampInt(stake, 1, maxStakeForSlider)}</span>
+                  <span className="text-sm font-black text-foreground">
+                    {clampInt(stake, 1, maxStakeForSlider).toLocaleString()}
+                  </span>
                 </div>
 
                 <input
@@ -664,21 +719,22 @@ export default function Home() {
 
                       <div>
                         <div className="grid grid-cols-2 gap-3 mb-6">
-                          <Button
-                            className="bg-primary hover:bg-primary/90 text-white font-black py-7 rounded-2xl text-lg shadow-lg shadow-primary/20"
+                          <TradeButton
+                            label="YES"
+                            price={market.yesPrice}
+                            stake={clampInt(stake, 1, maxStakeForSlider)}
+                            variant="yes"
                             disabled={tradeMutation.isPending}
                             onClick={() => handleTrade(market.id, "YES")}
-                          >
-                            YES {Math.round(market.yesPrice * 100)}¢
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="border-border hover:bg-secondary text-foreground font-black py-7 rounded-2xl text-lg"
+                          />
+                          <TradeButton
+                            label="NO"
+                            price={market.noPrice}
+                            stake={clampInt(stake, 1, maxStakeForSlider)}
+                            variant="no"
                             disabled={tradeMutation.isPending}
                             onClick={() => handleTrade(market.id, "NO")}
-                          >
-                            NO {Math.round(market.noPrice * 100)}¢
-                          </Button>
+                          />
                         </div>
 
                         <div className="flex justify-between items-center pt-4 border-t border-border/50">
@@ -710,13 +766,10 @@ export default function Home() {
                   ))
                 )}
               </TabsContent>
-
-              {/* If you want per-tab filtering later, we can add it. */}
             </Tabs>
           </div>
 
           <aside className="space-y-8">
-            {/* Invite Peers */}
             <Card className="p-8 bg-primary text-white border-none rounded-[2rem] overflow-hidden relative group">
               <div className="relative z-10">
                 <h4 className="font-black text-2xl mb-3">Invite Peers</h4>
@@ -758,7 +811,6 @@ export default function Home() {
               <div className="absolute -bottom-12 -right-12 h-40 w-40 bg-white/20 rounded-full blur-3xl transition-transform group-hover:scale-125 duration-700" />
             </Card>
 
-            {/* Leaderboard */}
             <Card className="p-8 border-border rounded-[2rem] bg-secondary/30">
               <h4 className="font-black flex items-center gap-2 mb-6 uppercase tracking-widest text-sm text-foreground">
                 <Trophy className="h-4 w-4 text-primary" /> Top Bears
