@@ -41,6 +41,7 @@ type Market = {
   endsAt: string;
   volume: number;
   yesPrice: number; // 0..1
+  noPrice: number;  // 0..1
   detailedRules: string;
 };
 
@@ -50,6 +51,12 @@ type ApiMarketRow = {
   status: string | null;
   created_at: string | null;
   volume: number;
+
+  // NEW FIELDS FROM DB/API
+  yes_price?: number | string | null;
+  no_price?: number | string | null;
+  rules?: string | null;
+  ends_at?: string | null;
 };
 
 type ApiMarketsResponse = { markets: ApiMarketRow[] };
@@ -173,8 +180,19 @@ function RulesModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open
   );
 }
 
-// Client-side adapter because your Supabase `markets` table (per screenshot) only has:
-// id, question, status, created_at. Volume is computed server-side.
+function clamp01(n: number) {
+  if (!Number.isFinite(n)) return 0.5;
+  return Math.max(0, Math.min(1, n));
+}
+
+function formatEndsAt(endsAtIso: string | null | undefined) {
+  if (!endsAtIso) return "TBD";
+  const d = new Date(endsAtIso);
+  if (Number.isNaN(d.getTime())) return "TBD";
+  return d.toLocaleString();
+}
+
+// Now uses DB-backed yes_price, no_price, rules, ends_at.
 function adaptApiMarket(m: ApiMarketRow): Market {
   const q = (m.question ?? "").trim();
 
@@ -187,10 +205,22 @@ function adaptApiMarket(m: ApiMarketRow): Market {
   else if (lowered.includes("yik") || lowered.includes("anthem") || lowered.includes("sproul") || lowered.includes("protest"))
     category = "Chaos";
 
-  // Basic defaults
-  const endsAt = "Today";
-  const yesPrice = 0.5; // until you store pricing in DB
-  const detailedRules = "Resolution details are not yet configured for this market. Check back soon.";
+  const yesRaw = m.yes_price;
+  const noRaw = m.no_price;
+
+  const yesPrice = clamp01(
+    typeof yesRaw === "number" ? yesRaw : yesRaw != null ? Number(yesRaw) : 0.5
+  );
+
+  // Prefer stored no_price; otherwise fall back to complement
+  const noPrice = clamp01(
+    typeof noRaw === "number" ? noRaw : noRaw != null ? Number(noRaw) : (1 - yesPrice)
+  );
+
+  const endsAt = formatEndsAt(m.ends_at);
+
+  const detailedRules =
+    (m.rules ?? "").trim() || "Resolution details are not yet configured for this market. Check back soon.";
 
   return {
     id: m.id,
@@ -200,6 +230,7 @@ function adaptApiMarket(m: ApiMarketRow): Market {
     endsAt,
     volume: Number(m.volume ?? 0),
     yesPrice,
+    noPrice,
     detailedRules,
   };
 }
@@ -213,7 +244,6 @@ export default function Home() {
   const meQuery = useQuery<ApiMeResponse>({
     queryKey: ["/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
-    // ensures the header token changes (login/logout) reflect quickly
     refetchOnWindowFocus: true,
     staleTime: 0,
   });
@@ -280,13 +310,11 @@ export default function Home() {
   // Logout
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      // backend should have POST /auth/logout
       try {
         await apiRequest("POST", "/auth/logout", {});
       } catch {
         // ignore — still clear local token
       }
-      // Clear local token so getQueryFn stops sending it
       window.localStorage.removeItem("calshi_session_token");
     },
     onSuccess: async () => {
@@ -295,7 +323,6 @@ export default function Home() {
       setLocation("/auth");
     },
     onError: () => {
-      // Still clear local token; user can relogin
       window.localStorage.removeItem("calshi_session_token");
       queryClient.invalidateQueries({ queryKey: ["/me"] }).catch(() => {});
       toast({ title: "Logged out", description: "Session cleared locally." });
@@ -310,7 +337,6 @@ export default function Home() {
     }
 
     try {
-      // minimal fixed bet size for now; you can replace with a modal/input later
       const amount = 50;
       await tradeMutation.mutateAsync({ marketId, side, amount });
       toast({ title: "Trade placed", description: `Bought ${side} (${amount} tokens)` });
@@ -510,7 +536,7 @@ export default function Home() {
                             disabled={tradeMutation.isPending}
                             onClick={() => handleTrade(market.id, "NO")}
                           >
-                            NO {Math.round((1 - market.yesPrice) * 100)}¢
+                            NO {Math.round(market.noPrice * 100)}¢
                           </Button>
                         </div>
 
@@ -581,7 +607,6 @@ export default function Home() {
                 <Trophy className="h-4 w-4 text-primary" /> Top Bears
               </h4>
 
-              {/* Keep your existing layout; just swap data source */}
               <div className="space-y-6">
                 {(leaders as any[]).slice(0, 4).map((leader: any, i: number) => (
                   <div key={`${leader.name}-${i}`} className="flex justify-between items-center">
@@ -595,7 +620,6 @@ export default function Home() {
                   </div>
                 ))}
 
-                {/* Optional: show a hint if endpoint missing (404) */}
                 {leaderboardQuery.isError && (
                   <div className="pt-2 text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
                     Leaderboard endpoint unavailable — showing demo data.
@@ -607,7 +631,6 @@ export default function Home() {
                 variant="ghost"
                 className="w-full mt-8 text-xs font-black uppercase tracking-[0.2em] h-10 hover:bg-primary/10 hover:text-primary rounded-xl"
                 onClick={() => {
-                  // If you later build a full leaderboard page/route, wire this up.
                   toast({
                     title: "Coming soon",
                     description: "Full leaderboard view isn’t wired yet.",
