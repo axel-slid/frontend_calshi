@@ -8,28 +8,43 @@ import { Label } from "@/components/ui/label";
 import { GraduationCap, ShieldCheck, Mail } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { GoogleLogin } from "@react-oauth/google";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
+
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<1 | 2>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleGoogleLogin() {
-    // Still mocked: move to step 2
-    setStep(2);
-    toast({ title: "Google Auth Successful", description: "Now, choose your campus handle." });
+  async function handleGoogleSuccess(idToken: string) {
+    try {
+      // Exchange Google ID token for your app session cookie
+      const res = await apiRequest("POST", "/auth/google", { idToken });
+      const body = await res.json();
+
+      const authedEmail = body?.user?.email;
+      if (typeof authedEmail === "string") setEmail(authedEmail);
+
+      toast({ title: "Signed in with Google", description: "Now choose your campus handle." });
+      setStep(2);
+    } catch (e: any) {
+      toast({
+        title: "Google sign-in failed",
+        description: e?.message ?? "Could not sign in.",
+        variant: "destructive",
+      });
+    }
   }
 
   async function handleCompleteProfile() {
-    const trimmedEmail = email.trim().toLowerCase();
     const trimmedUsername = username.trim();
 
-    if (!trimmedEmail.endsWith(".edu") && !trimmedEmail.includes("berkeley")) {
+    if (!email.toLowerCase().endsWith("@berkeley.edu")) {
       toast({
         title: "Access Denied",
-        description: "You must use a Berkeley .edu email to join the competition.",
+        description: "You must use a Berkeley @berkeley.edu email to join.",
         variant: "destructive",
       });
       return;
@@ -46,25 +61,16 @@ export default function AuthPage() {
 
     setIsSubmitting(true);
     try {
-      // This creates a server session cookie (credentials: include is handled in apiRequest)
-      await apiRequest("POST", "/auth/dev", {
-        email: trimmedEmail,
-        username: trimmedUsername,
-      });
+      // Optional: only if you implement this endpoint on backend.
+      // If you don't want usernames stored yet, delete this call and just redirect.
+      await apiRequest("POST", "/me/username", { username: trimmedUsername });
 
-      toast({
-        title: "Welcome to Calshi!",
-        description: "You're signed in and ready to trade.",
-      });
-
-      // go home; Home page should call /me to display credits
+      toast({ title: "Welcome!", description: "You're ready to trade." });
       setLocation("/");
     } catch (e: any) {
-      // apiRequest throws `${status}: ${text}`
-      const message = typeof e?.message === "string" ? e.message : "Could not sign in.";
       toast({
-        title: "Sign-in failed",
-        description: message,
+        title: "Could not save username",
+        description: e?.message ?? "Try again.",
         variant: "destructive",
       });
     } finally {
@@ -89,17 +95,34 @@ export default function AuthPage() {
               <div className="rounded-xl border border-accent/20 bg-accent/5 p-4 flex gap-3 items-start">
                 <ShieldCheck className="h-5 w-5 text-accent shrink-0 mt-0.5" />
                 <p className="text-xs text-accent/90 leading-relaxed">
-                  <strong>Berkeley Only:</strong> Sign-in requires a valid @berkeley.edu Google account. No purchase necessary.
+                  <strong>Berkeley Only:</strong> Sign-in requires a valid @berkeley.edu Google account.
                 </p>
               </div>
 
-              <Button
-                onClick={handleGoogleLogin}
-                className="w-full h-12 bg-white text-black hover:bg-gray-100 font-bold flex gap-3"
-              >
-                <img src="https://www.google.com/favicon.ico" className="h-4 w-4" alt="Google" />
-                Sign in with Google
-              </Button>
+              <div className="flex justify-center">
+                <GoogleLogin
+                  onSuccess={(cred) => {
+                    const idToken = cred.credential;
+                    if (!idToken) {
+                      toast({
+                        title: "Google sign-in failed",
+                        description: "No credential returned by Google.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    void handleGoogleSuccess(idToken);
+                  }}
+                  onError={() => {
+                    toast({
+                      title: "Google sign-in failed",
+                      description: "Please try again.",
+                      variant: "destructive",
+                    });
+                  }}
+                  useOneTap={false}
+                />
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
@@ -112,11 +135,12 @@ export default function AuthPage() {
                     placeholder="oski@berkeley.edu"
                     className="pl-10 h-12 bg-card/50"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={isSubmitting}
-                    autoComplete="email"
+                    disabled
                   />
                 </div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">
+                  Locked to your Google account
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -143,7 +167,7 @@ export default function AuthPage() {
                 className="w-full h-12 bg-accent text-accent-foreground font-bold"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Signing in..." : "Enter Competition"}
+                {isSubmitting ? "Saving..." : "Enter Competition"}
               </Button>
             </div>
           )}
