@@ -96,28 +96,31 @@ export default function AuthPage() {
               </div>
 
               <div className="flex justify-center">
-                <GoogleLogin
-                  onSuccess={(cred) => {
-                    const idToken = cred.credential;
-                    if (!idToken) {
-                      toast({
-                        title: "Google sign-in failed",
-                        description: "No credential returned by Google.",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    void handleGoogleSuccess(idToken);
-                  }}
-                  onError={() => {
-                    toast({
-                      title: "Google sign-in failed",
-                      description: "Please try again.",
-                      variant: "destructive",
-                    });
-                  }}
-                  useOneTap={false}
-                />
+               <GoogleLogin
+  onSuccess={(cred) => {
+    console.log("✅ GoogleLogin onSuccess fired", cred);
+    const idToken = cred.credential;
+    if (!idToken) {
+      console.error("❌ No credential returned by Google");
+      toast({
+        title: "Google sign-in failed",
+        description: "No credential returned by Google.",
+        variant: "destructive",
+      });
+      return;
+    }
+    void handleGoogleSuccess(idToken);
+  }}
+  onError={() => {
+    console.error("❌ GoogleLogin onError fired");
+    toast({
+      title: "Google sign-in failed",
+      description: "Please try again.",
+      variant: "destructive",
+    });
+  }}
+  useOneTap={false}
+/> 
               </div>
             </div>
           ) : (
