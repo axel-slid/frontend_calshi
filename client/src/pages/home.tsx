@@ -41,7 +41,7 @@ type Market = {
   endsAt: string;
   volume: number;
   yesPrice: number; // 0..1
-  noPrice: number;  // 0..1
+  noPrice: number; // 0..1
   detailedRules: string;
 };
 
@@ -50,7 +50,9 @@ type ApiMarketRow = {
   question: string;
   status: string | null;
   created_at: string | null;
-  volume: number;
+
+  // NOTE: backend may provide volume even if DB doesn't have it
+  volume?: number | string | null;
 
   // NEW FIELDS FROM DB/API
   yes_price?: number | string | null;
@@ -192,7 +194,8 @@ function formatEndsAt(endsAtIso: string | null | undefined) {
   return d.toLocaleString();
 }
 
-// Now uses DB-backed yes_price, no_price, rules, ends_at.
+// Uses DB-backed yes_price, no_price, rules, ends_at.
+// Volume may be missing if your backend sets it to 0 or doesn't include it.
 function adaptApiMarket(m: ApiMarketRow): Market {
   const q = (m.question ?? "").trim();
 
@@ -208,14 +211,10 @@ function adaptApiMarket(m: ApiMarketRow): Market {
   const yesRaw = m.yes_price;
   const noRaw = m.no_price;
 
-  const yesPrice = clamp01(
-    typeof yesRaw === "number" ? yesRaw : yesRaw != null ? Number(yesRaw) : 0.5
-  );
+  const yesPrice = clamp01(typeof yesRaw === "number" ? yesRaw : yesRaw != null ? Number(yesRaw) : 0.5);
 
   // Prefer stored no_price; otherwise fall back to complement
-  const noPrice = clamp01(
-    typeof noRaw === "number" ? noRaw : noRaw != null ? Number(noRaw) : (1 - yesPrice)
-  );
+  const noPrice = clamp01(typeof noRaw === "number" ? noRaw : noRaw != null ? Number(noRaw) : 1 - yesPrice);
 
   const endsAt = formatEndsAt(m.ends_at);
 
@@ -250,6 +249,12 @@ export default function Home() {
 
   const signedIn = !!(meQuery.data as any)?.user;
   const tokens = Number((meQuery.data as any)?.user?.credits ?? 0);
+
+  // NEW: show username next to portfolio/token pill
+  const username =
+    ((meQuery.data as any)?.user?.username ?? "").toString().trim() ||
+    ((meQuery.data as any)?.user?.email ?? "").toString().split("@")[0] ||
+    "User";
 
   // Markets from backend (Supabase)
   const marketsQuery = useQuery<ApiMarketsResponse>({
@@ -359,12 +364,16 @@ export default function Home() {
           <div className="flex items-center gap-4">
             {signedIn ? (
               <>
-                <Link href="/portfolio">
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary hover:bg-secondary/80 transition-all cursor-pointer border border-border">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    <span className="font-bold text-sm">{tokens.toLocaleString()}</span>
-                  </div>
-                </Link>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-foreground">{username}</span>
+
+                  <Link href="/portfolio">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary hover:bg-secondary/80 transition-all cursor-pointer border border-border">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                      <span className="font-bold text-sm">{tokens.toLocaleString()}</span>
+                    </div>
+                  </Link>
+                </div>
 
                 <Button
                   variant="ghost"
