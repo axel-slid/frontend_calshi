@@ -48,41 +48,43 @@ export default function AuthPage() {
       return;
     }
 
-    if (trimmedUsername.length < 3) {
-      toast({
-        title: "Invalid Username",
-        description: "Username must be at least 3 characters.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      await apiRequest("POST", "/me/username", { username: trimmedUsername });
-
-      toast({ title: "Welcome!", description: "Username saved. You're ready to trade." });
-      setLocation("/");
-    } catch (e: any) {
-  let msg = e?.message ?? "Try again.";
-
-  // If apiRequest throws, it often includes response text; handle both cases
-  try {
-    if (e?.response) {
-      const data = await e.response.json();
-      msg = data?.error ?? msg;
-    }
-  } catch {}
-
+   if (trimmedUsername.length < 3) {
   toast({
-    title: "Could not save username",
-    description: msg,
+    title: "Invalid Username",
+    description: "Username must be at least 3 characters.",
     variant: "destructive",
   });
-    } finally {
-      setIsSubmitting(false);
-    }
+  return;
+}
+
+setIsSubmitting(true);
+try {
+  const res = await apiRequest("POST", "/me/username", { username: trimmedUsername });
+
+  // Always attempt to read the response body
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    // ignore json parse errors
   }
+
+  if (!res.ok) {
+    // Show the backend error if provided
+    throw new Error(data?.error || `HTTP ${res.status}`);
+  }
+
+  toast({ title: "Welcome!", description: "Username saved. You're ready to trade." });
+  setLocation("/");
+} catch (e: any) {
+  toast({
+    title: "Could not save username",
+    description: e?.message ?? "Try again.",
+    variant: "destructive",
+  });
+} finally {
+  setIsSubmitting(false);
+} 
 
   return (
     <div className="min-h-screen bg-background berkeley-gradient flex items-center justify-center p-6">
