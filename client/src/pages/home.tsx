@@ -51,10 +51,10 @@ type ApiMarketRow = {
   status: string | null;
   created_at: string | null;
 
-  // NOTE: backend may provide volume even if DB doesn't have it
+  // backend may provide volume even if DB doesn't have it
   volume?: number | string | null;
 
-  // NEW FIELDS FROM DB/API
+  // DB/API fields
   yes_price?: number | string | null;
   no_price?: number | string | null;
   rules?: string | null;
@@ -75,6 +75,8 @@ type ApiMeResponse =
 type ApiLeaderboardResponse = {
   leaders: { name: string; tokens: number }[];
 };
+
+type ApiInviteCodeResponse = { code: string } | null;
 
 const typewriterWords = [
   "campus events.",
@@ -194,12 +196,9 @@ function formatEndsAt(endsAtIso: string | null | undefined) {
   return d.toLocaleString();
 }
 
-// Uses DB-backed yes_price, no_price, rules, ends_at.
-// Volume may be missing if your backend sets it to 0 or doesn't include it.
 function adaptApiMarket(m: ApiMarketRow): Market {
   const q = (m.question ?? "").trim();
 
-  // Heuristics to keep your UI categories/tags alive until you add real columns
   const lowered = q.toLowerCase();
   let category: Market["category"] = "Campus";
   if (lowered.includes("rain") || lowered.includes("weather") || lowered.includes("temperature")) category = "Weather";
@@ -212,8 +211,6 @@ function adaptApiMarket(m: ApiMarketRow): Market {
   const noRaw = m.no_price;
 
   const yesPrice = clamp01(typeof yesRaw === "number" ? yesRaw : yesRaw != null ? Number(yesRaw) : 0.5);
-
-  // Prefer stored no_price; otherwise fall back to complement
   const noPrice = clamp01(typeof noRaw === "number" ? noRaw : noRaw != null ? Number(noRaw) : 1 - yesPrice);
 
   const endsAt = formatEndsAt(m.ends_at);
@@ -234,10 +231,24 @@ function adaptApiMarket(m: ApiMarketRow): Market {
   };
 }
 
+function clampInt(n: number, min: number, max: number) {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+// Choose a reasonable default stake based on current balance
+function defaultStake(balance: number) {
+  if (!Number.isFinite(balance) || balance <= 0) return 50;
+  return clampInt(Math.round(balance * 0.05), 10, Math.min(500, Math.floor(balance)));
+}
+
 export default function Home() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [showRules, setShowRules] = useState(false);
+
+  // Stake slider state (global stake used for all trades)
+  const [stake, setStake] = useState(50);
 
   // Auth/session user
   const meQuery = useQuery<ApiMeResponse>({
@@ -250,13 +261,34 @@ export default function Home() {
   const signedIn = !!(meQuery.data as any)?.user;
   const tokens = Number((meQuery.data as any)?.user?.credits ?? 0);
 
-  // NEW: show username next to portfolio/token pill
+  // Set a nicer default stake once we know token balance (only once per balance load)
+  useEffect(() => {
+    if (!signedIn) return;
+    if (!Number.isFinite(tokens) || tokens <= 0) return;
+    setStake((prev) => {
+      // if user already moved it away from default 50, don't override aggressively
+      if (prev !== 50) return prev;
+      return defaultStake(tokens);
+    });
+  }, [signedIn, tokens]);
+
   const username =
     ((meQuery.data as any)?.user?.username ?? "").toString().trim() ||
     ((meQuery.data as any)?.user?.email ?? "").toString().split("@")[0] ||
     "User";
 
-  // Markets from backend (Supabase)
+  // Invite code (requires backend /referrals/code)
+  const inviteQuery = useQuery<ApiInviteCodeResponse>({
+    queryKey: ["/referrals/code"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: signedIn,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const inviteCode = ((inviteQuery.data as any)?.code ?? "").toString();
+
+  // Markets from backend
   const marketsQuery = useQuery<ApiMarketsResponse>({
     queryKey: ["/markets"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -268,7 +300,7 @@ export default function Home() {
     return rows.map(adaptApiMarket);
   }, [marketsQuery.data]);
 
-  // Stats from backend (Supabase)
+  // Stats
   const statsQuery = useQuery<ApiStatsResponse>({
     queryKey: ["/stats"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -278,7 +310,7 @@ export default function Home() {
   const activeTokensStaked = Number((statsQuery.data as any)?.activeTokensStaked ?? 0);
   const dailyForecasters = Number((statsQuery.data as any)?.dailyForecasters ?? 0);
 
-  // Leaderboard from backend (Supabase) with fallback to demo while endpoint is missing/empty
+  // Leaderboard
   const leaderboardQuery = useQuery<ApiLeaderboardResponse>({
     queryKey: ["/leaderboard"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -306,7 +338,7 @@ export default function Home() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["/me"] });
-      await queryClient.invalidateQueries({ queryKey: ["/markets"] }); // volume changes
+      await queryClient.invalidateQueries({ queryKey: ["/markets"] });
       await queryClient.invalidateQueries({ queryKey: ["/stats"] });
       await queryClient.invalidateQueries({ queryKey: ["/leaderboard"] });
     },
@@ -318,7 +350,7 @@ export default function Home() {
       try {
         await apiRequest("POST", "/auth/logout", {});
       } catch {
-        // ignore — still clear local token
+        // ignore
       }
       window.localStorage.removeItem("calshi_session_token");
     },
@@ -341,8 +373,24 @@ export default function Home() {
       return;
     }
 
+    const maxStake = Math.max(0, Math.floor(tokens));
+    const amount = clampInt(stake, 1, Math.max(1, maxStake));
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({ title: "Invalid stake", description: "Choose a stake greater than 0.", variant: "destructive" });
+      return;
+    }
+
+    if (amount > tokens) {
+      toast({
+        title: "Not enough tokens",
+        description: `You only have ${tokens.toLocaleString()} tokens.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      const amount = 50;
       await tradeMutation.mutateAsync({ marketId, side, amount });
       toast({ title: "Trade placed", description: `Bought ${side} (${amount} tokens)` });
     } catch (e: any) {
@@ -350,6 +398,13 @@ export default function Home() {
       toast({ title: "Trade failed", description: msg, variant: "destructive" });
     }
   }
+
+  const maxStakeForSlider = useMemo(() => {
+    if (!signedIn) return 500;
+    const t = Math.floor(tokens);
+    if (!Number.isFinite(t) || t <= 0) return 500;
+    return Math.max(10, t);
+  }, [signedIn, tokens]);
 
   return (
     <div className="min-h-screen bg-background bg-grid">
@@ -398,7 +453,7 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-16">
-        <section className="mb-20 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-12">
+        <section className="mb-16 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-12">
           <div className="max-w-2xl">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -472,6 +527,83 @@ export default function Home() {
               </div>
             </Card>
           </motion.div>
+        </section>
+
+        {/* Stake slider (global) */}
+        <section className="mb-10">
+          <Card className="p-6 border-border rounded-[1.5rem] bg-secondary/20">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-widest text-foreground">Stake Amount</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Choose how many tokens to spend per trade.
+                  {signedIn ? ` Balance: ${tokens.toLocaleString()}` : " Sign in to trade."}
+                </p>
+              </div>
+
+              <div className="w-full md:max-w-md">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Stake</span>
+                  <span className="text-sm font-black text-foreground">{clampInt(stake, 1, maxStakeForSlider)}</span>
+                </div>
+
+                <input
+                  type="range"
+                  min={1}
+                  max={maxStakeForSlider}
+                  step={1}
+                  value={clampInt(stake, 1, maxStakeForSlider)}
+                  disabled={!signedIn || maxStakeForSlider <= 1}
+                  onChange={(e) => setStake(Number(e.target.value))}
+                  className="w-full"
+                />
+
+                <div className="flex justify-between mt-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                  <span>1</span>
+                  <span>{maxStakeForSlider.toLocaleString()}</span>
+                </div>
+
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-3 rounded-xl border-border"
+                    disabled={!signedIn}
+                    onClick={() => setStake(10)}
+                  >
+                    10
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-3 rounded-xl border-border"
+                    disabled={!signedIn}
+                    onClick={() => setStake(50)}
+                  >
+                    50
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-3 rounded-xl border-border"
+                    disabled={!signedIn}
+                    onClick={() => setStake(defaultStake(tokens))}
+                  >
+                    Smart
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-3 rounded-xl border-border ml-auto"
+                    disabled={!signedIn}
+                    onClick={() => setStake(maxStakeForSlider)}
+                  >
+                    Max
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
@@ -584,6 +716,7 @@ export default function Home() {
           </div>
 
           <aside className="space-y-8">
+            {/* Invite Peers */}
             <Card className="p-8 bg-primary text-white border-none rounded-[2rem] overflow-hidden relative group">
               <div className="relative z-10">
                 <h4 className="font-black text-2xl mb-3">Invite Peers</h4>
@@ -592,25 +725,40 @@ export default function Home() {
                 </p>
                 <div className="flex gap-2">
                   <Input
-                    value="CALSHI2026"
+                    value={signedIn ? (inviteCode || "—") : "Sign in to get a code"}
                     readOnly
                     className="bg-white/20 border-white/10 text-white font-mono text-sm h-11 focus-visible:ring-0"
                   />
                   <Button
                     size="icon"
                     className="bg-white text-primary hover:bg-white/90 shrink-0 h-11 w-11 rounded-xl"
+                    disabled={!signedIn || !inviteCode}
                     onClick={() => {
-                      navigator.clipboard.writeText("CALSHI2026").catch(() => {});
+                      if (!inviteCode) return;
+                      navigator.clipboard.writeText(inviteCode).catch(() => {});
                       toast({ title: "Copied", description: "Invite code copied to clipboard." });
                     }}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
+
+                {signedIn && inviteQuery.isLoading && (
+                  <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">
+                    Generating code…
+                  </div>
+                )}
+
+                {signedIn && inviteQuery.isError && (
+                  <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">
+                    Could not load invite code.
+                  </div>
+                )}
               </div>
               <div className="absolute -bottom-12 -right-12 h-40 w-40 bg-white/20 rounded-full blur-3xl transition-transform group-hover:scale-125 duration-700" />
             </Card>
 
+            {/* Leaderboard */}
             <Card className="p-8 border-border rounded-[2rem] bg-secondary/30">
               <h4 className="font-black flex items-center gap-2 mb-6 uppercase tracking-widest text-sm text-foreground">
                 <Trophy className="h-4 w-4 text-primary" /> Top Bears
