@@ -10,7 +10,6 @@ import {
   Trophy,
   Copy,
   ChevronRight,
-  TrendingUp,
   Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -154,7 +153,8 @@ function RulesModal({
                 1
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Weekly Drop:</strong> New prompts are released every Sunday at 12:00 PM PST.
+                <strong className="text-foreground">Weekly Drop:</strong> New prompts are released every Sunday at 12:00
+                PM PST.
               </p>
             </div>
             <div className="flex gap-3">
@@ -162,7 +162,8 @@ function RulesModal({
                 2
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Tokens:</strong> Start with 1,000 play tokens. No purchase necessary. No monetary value.
+                <strong className="text-foreground">Tokens:</strong> Start with 1,000 play tokens. No purchase necessary.
+                No monetary value.
               </p>
             </div>
             <div className="flex gap-3">
@@ -170,7 +171,8 @@ function RulesModal({
                 3
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Verification:</strong> Must sign in with a verified @berkeley.edu email.
+                <strong className="text-foreground">Verification:</strong> Must sign in with a verified @berkeley.edu
+                email.
               </p>
             </div>
             <div className="flex gap-3">
@@ -179,6 +181,15 @@ function RulesModal({
               </div>
               <p className="text-sm text-muted-foreground">
                 <strong className="text-foreground">Contest End:</strong> Weekly contest ends Friday at 5:00 PM PST.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center shrink-0 text-xs font-bold border">
+                5
+              </div>
+              <p className="text-sm text-muted-foreground">
+                <strong className="text-foreground">Eligibility:</strong> Prize only valid if at least 100 users
+                participate.
               </p>
             </div>
           </div>
@@ -218,9 +229,19 @@ function adaptApiMarket(m: ApiMarketRow): Market {
   const lowered = q.toLowerCase();
   let category: Market["category"] = "Campus";
   if (lowered.includes("rain") || lowered.includes("weather") || lowered.includes("temperature")) category = "Weather";
-  else if (lowered.includes("cafe") || lowered.includes("dining") || lowered.includes("menu") || lowered.includes("boba"))
+  else if (
+    lowered.includes("cafe") ||
+    lowered.includes("dining") ||
+    lowered.includes("menu") ||
+    lowered.includes("boba")
+  )
     category = "Dining";
-  else if (lowered.includes("yik") || lowered.includes("anthem") || lowered.includes("sproul") || lowered.includes("protest"))
+  else if (
+    lowered.includes("yik") ||
+    lowered.includes("anthem") ||
+    lowered.includes("sproul") ||
+    lowered.includes("protest")
+  )
     category = "Chaos";
 
   const yesRaw = m.yes_price;
@@ -298,12 +319,24 @@ function TradeButton({
       <div className="flex flex-col items-center leading-none">
         <div className="flex items-baseline gap-2">
           <span className="text-lg">{label}</span>
-          <span className={variant === "yes" ? "text-white/80 text-sm font-extrabold" : "text-muted-foreground text-sm font-extrabold"}>
+          <span
+            className={
+              variant === "yes"
+                ? "text-white/80 text-sm font-extrabold"
+                : "text-muted-foreground text-sm font-extrabold"
+            }
+          >
             {pct}%
           </span>
         </div>
 
-        <div className={variant === "yes" ? "mt-2 text-[11px] font-extrabold text-white/85" : "mt-2 text-[11px] font-extrabold text-muted-foreground"}>
+        <div
+          className={
+            variant === "yes"
+              ? "mt-2 text-[11px] font-extrabold text-white/85"
+              : "mt-2 text-[11px] font-extrabold text-muted-foreground"
+          }
+        >
           {payout == null ? (
             <>Stake → Payout —</>
           ) : (
@@ -399,6 +432,24 @@ function formatCountdown(ms: number) {
   return `${pad(hh)}h ${pad(mm)}m ${pad(ss)}s`;
 }
 
+function formatContestEndLabel(utcMs: number) {
+  // Example: "Fri, Feb 27 · 5:00 PM PST"
+  const d = new Date(utcMs);
+  const tz = "America/Los_Angeles";
+
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(d);
+  const monthDay = new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric" }).format(d);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  }).format(d);
+
+  return `${weekday}, ${monthDay} · ${time}`;
+}
+
 export default function Home() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
@@ -417,15 +468,7 @@ export default function Home() {
   const contestCountdown = formatCountdown(contestEndUtcMs - now.getTime());
 
   const contestEndLabel = useMemo(() => {
-    return new Date(contestEndUtcMs).toLocaleString("en-US", {
-      timeZone: "America/Los_Angeles",
-      weekday: "short",
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatContestEndLabel(contestEndUtcMs);
   }, [contestEndUtcMs]);
 
   const meQuery = useQuery<ApiMeResponse>({
@@ -578,17 +621,16 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {signedIn ? (
               <>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    className="h-11 rounded-full border-border bg-secondary/40 hover:bg-secondary/70 font-black"
-                    onClick={() => setLocation("/portfolio")}
-                  >
-                    {username}
-                    <span className="mx-2 text-muted-foreground font-black">•</span>
-                    {tokens.toLocaleString()}
-                  </Button>
+                <div className="flex items-center gap-4">
+                  {/* Not a button anymore */}
+                  <div className="select-none leading-tight">
+                    <div className="text-sm font-black text-foreground">{username}</div>
+                    <div className="text-xs font-bold text-muted-foreground">
+                      {tokens.toLocaleString()} credits
+                    </div>
+                  </div>
 
+                  {/* Only button */}
                   <Button
                     className="h-11 rounded-full bg-primary hover:bg-primary/90 text-white font-black px-6"
                     onClick={() => setLocation("/portfolio")}
@@ -627,14 +669,23 @@ export default function Home() {
                 <Trophy className="h-5 w-5 text-primary mt-0.5" />
                 <div>
                   <div className="text-xs font-black uppercase tracking-widest text-primary">Weekly Contest Ends</div>
-                  <div className="text-sm text-muted-foreground mt-1">
-                    Friday 5:00 PM PST • {contestEndLabel} PST
-                  </div>
+                  {/* No redundancy: single formatted label */}
+                  <div className="text-sm text-muted-foreground mt-1">{contestEndLabel}</div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-xs font-black uppercase tracking-widest text-muted-foreground">Time remaining</div>
                 <div className="text-2xl font-black tabular-nums text-foreground">{contestCountdown}</div>
+              </div>
+            </div>
+
+            {/* Bottom additions */}
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <div className="text-sm text-muted-foreground">
+                DM us for suggestions on Berkeley markets.
+              </div>
+              <div className="mt-1 text-[11px] leading-snug text-muted-foreground/70">
+                *Competition prize only valid if 100 users participate.
               </div>
             </div>
           </Card>
@@ -688,11 +739,7 @@ export default function Home() {
             )}
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="hidden lg:block w-full max-w-sm"
-          >
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="hidden lg:block w-full max-w-sm">
             <Card className="p-8 border-primary/20 bg-primary/5 rounded-[2.5rem] relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4">
                 <Shield className="h-8 w-8 text-primary/20" />
@@ -737,7 +784,9 @@ export default function Home() {
               <div className="w-full md:max-w-md">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Stake</span>
-                  <span className="text-sm font-black text-foreground">{clampInt(stake, 1, maxStakeForSlider).toLocaleString()}</span>
+                  <span className="text-sm font-black text-foreground">
+                    {clampInt(stake, 1, maxStakeForSlider).toLocaleString()}
+                  </span>
                 </div>
 
                 <input
@@ -788,7 +837,8 @@ export default function Home() {
                 <Card className="p-6">Loading markets…</Card>
               ) : marketsQuery.isError ? (
                 <Card className="p-6">
-                  Could not load markets. <span className="text-muted-foreground text-sm">{(marketsQuery.error as any)?.message ?? ""}</span>
+                  Could not load markets.{" "}
+                  <span className="text-muted-foreground text-sm">{(marketsQuery.error as any)?.message ?? ""}</span>
                 </Card>
               ) : filteredMarkets.length === 0 ? (
                 <Card className="p-6">No markets match your search.</Card>
