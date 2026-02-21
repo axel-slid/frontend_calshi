@@ -80,6 +80,7 @@ const typewriterWords = [
   "weather shifts.",
   "YikYak trends.",
   "Sproul protests.",
+  "Berkeley"
 ];
 
 const demoLeaders = [
