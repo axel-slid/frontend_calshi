@@ -11,8 +11,8 @@ import {
   Copy,
   ChevronRight,
   Mail,
-  ThumbsUp,
-  ThumbsDown,
+  ArrowUp,
+  ArrowDown,
   Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -1027,14 +1027,12 @@ export default function Home() {
               )}
             </div>
 
-            {/* ✅ NEW: Suggestions section (this is what you were missing) */}
+            {/* ✅ Suggestions section */}
             <div className="pt-10">
               <div className="flex items-end justify-between gap-4 border-b border-border pb-4">
                 <div>
                   <h2 className="text-lg font-black uppercase tracking-widest text-foreground">Market Suggestions</h2>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Post an idea anonymously. Others can upvote / downvote.
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Post an idea anonymously. Others can upvote / downvote.</p>
                 </div>
 
                 <Button
@@ -1061,13 +1059,19 @@ export default function Home() {
                     <span className="text-muted-foreground text-sm">{(suggestionsQuery.error as any)?.message ?? ""}</span>
                   </Card>
                 ) : suggestions.length === 0 ? (
-                  <Card className="p-6">
-                    No suggestions yet. Be the first to post one.
-                  </Card>
+                  <Card className="p-6">No suggestions yet. Be the first to post one.</Card>
                 ) : (
                   suggestions.map((s) => {
                     const upActive = s.viewer_vote === 1;
                     const downActive = s.viewer_vote === -1;
+
+                    // Green up arrow / Red down arrow
+                    const upBtnClasses = upActive
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
+                      : "border-border hover:bg-emerald-50 text-emerald-600";
+                    const downBtnClasses = downActive
+                      ? "bg-red-600 hover:bg-red-700 text-white border-transparent"
+                      : "border-border hover:bg-red-50 text-red-600";
 
                     return (
                       <Card key={s.id} className="p-5 rounded-[1.25rem] border-border bg-secondary/10">
@@ -1088,22 +1092,22 @@ export default function Home() {
                             <div className="flex items-center gap-2">
                               <Button
                                 variant={upActive ? undefined : "outline"}
-                                className={`h-10 w-10 rounded-xl p-0 ${upActive ? "bg-primary text-white" : "border-border"}`}
+                                className={`h-10 w-10 rounded-xl p-0 ${upBtnClasses}`}
                                 disabled={voteSuggestionMutation.isPending}
                                 onClick={() => handleVoteSuggestion(s, 1)}
                                 title="Upvote"
                               >
-                                <ThumbsUp className="h-4 w-4" />
+                                <ArrowUp className="h-4 w-4" />
                               </Button>
 
                               <Button
                                 variant={downActive ? undefined : "outline"}
-                                className={`h-10 w-10 rounded-xl p-0 ${downActive ? "bg-primary text-white" : "border-border"}`}
+                                className={`h-10 w-10 rounded-xl p-0 ${downBtnClasses}`}
                                 disabled={voteSuggestionMutation.isPending}
                                 onClick={() => handleVoteSuggestion(s, -1)}
                                 title="Downvote"
                               >
-                                <ThumbsDown className="h-4 w-4" />
+                                <ArrowDown className="h-4 w-4" />
                               </Button>
                             </div>
 
@@ -1151,7 +1155,9 @@ export default function Home() {
                   <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">Generating code…</div>
                 )}
                 {signedIn && inviteQuery.isError && (
-                  <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">Could not load invite code.</div>
+                  <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">
+                    Could not load invite code.
+                  </div>
                 )}
               </div>
               <div className="absolute -bottom-12 -right-12 h-40 w-40 bg-white/20 rounded-full blur-3xl transition-transform group-hover:scale-125 duration-700" />
@@ -1210,11 +1216,7 @@ export default function Home() {
                 <a href="/terms.txt" target="_blank" rel="noopener noreferrer">
                   Terms of Service
                 </a>
-                <button
-                  type="button"
-                  onClick={() => setShowSupport(true)}
-                  className="hover:text-primary transition-colors"
-                >
+                <button type="button" onClick={() => setShowSupport(true)} className="hover:text-primary transition-colors">
                   Contact Support
                 </button>
               </div>
@@ -1255,9 +1257,7 @@ export default function Home() {
         <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader>
             <DialogTitle>Suggest a market</DialogTitle>
-            <DialogDescription>
-              This will appear anonymously to other users. Keep it short and specific.
-            </DialogDescription>
+            <DialogDescription>This will appear anonymously to other users. Keep it short and specific.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-2">
