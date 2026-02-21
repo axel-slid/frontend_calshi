@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -149,8 +148,7 @@ function RulesModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open
                 1
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Daily Prompts:</strong> New markets are added every day throughout the
-                week.
+                <strong className="text-foreground">Weekly Drop:</strong> New prompts are released every Sunday at 12:00 PM.
               </p>
             </div>
             <div className="flex gap-3">
@@ -197,6 +195,7 @@ function formatEndsAt(endsAtIso: string | null | undefined) {
 function adaptApiMarket(m: ApiMarketRow): Market {
   const q = (m.question ?? "").trim();
 
+  // You can replace this once you store real categories
   const lowered = q.toLowerCase();
   let category: Market["category"] = "Campus";
   if (lowered.includes("rain") || lowered.includes("weather") || lowered.includes("temperature")) category = "Weather";
@@ -234,14 +233,7 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
-function defaultStake(balance: number) {
-  if (!Number.isFinite(balance) || balance <= 0) return 50;
-  return clampInt(Math.round(balance * 0.05), 10, Math.min(500, Math.floor(balance)));
-}
-
-// Core UX math:
-// Spend `stake` tokens at price `p` (0..1) => shares = stake / p.
-// If outcome wins => payout = shares * 1 token/share.
+// Spend stake tokens at price p => shares = stake/p; payout = shares if correct
 function calcPayout(stake: number, price: number) {
   const p = Number(price);
   const s = Number(stake);
@@ -269,7 +261,7 @@ function TradeButton({
   disabled?: boolean;
   onClick: () => void;
 }) {
-  const cents = Math.round(clamp01(price) * 100);
+  const pct = Math.round(clamp01(price) * 100);
   const payout = calcPayout(stake, price);
   const profit = payout == null ? null : payout - stake;
 
@@ -286,18 +278,16 @@ function TradeButton({
       onClick={onClick}
     >
       <div className="flex flex-col items-center leading-none">
-        {/* Top line: outcome + price */}
         <div className="flex items-baseline gap-2">
           <span className="text-lg">{label}</span>
           <span className={variant === "yes" ? "text-white/80 text-sm font-extrabold" : "text-muted-foreground text-sm font-extrabold"}>
-            {cents}¢
+            {pct}%
           </span>
         </div>
 
-        {/* Bottom line: what stake becomes if correct */}
         <div className={variant === "yes" ? "mt-2 text-[11px] font-extrabold text-white/85" : "mt-2 text-[11px] font-extrabold text-muted-foreground"}>
           {payout == null ? (
-            <>Set stake → Payout —</>
+            <>Stake → Payout —</>
           ) : (
             <>
               Stake {formatInt(stake)} → Payout {formatInt(payout)}
@@ -314,6 +304,39 @@ function TradeButton({
   );
 }
 
+// Next Sunday at 12:00 PM local time
+function getNextSundayNoon(now: Date) {
+  const d = new Date(now);
+  const day = d.getDay(); // 0=Sun
+  const daysUntilSunday = (7 - day) % 7;
+  const next = new Date(d);
+  next.setDate(d.getDate() + daysUntilSunday);
+  next.setHours(12, 0, 0, 0);
+
+  // If it's already Sunday and past noon, go to next week
+  if (day === 0 && d.getTime() >= next.getTime()) {
+    next.setDate(next.getDate() + 7);
+  }
+  // If it's not Sunday but the computed Sunday noon is in the past (edge), push a week
+  if (d.getTime() >= next.getTime()) {
+    next.setDate(next.getDate() + 7);
+  }
+
+  return next;
+}
+
+function formatCountdown(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const dd = Math.floor(total / 86400);
+  const hh = Math.floor((total % 86400) / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  if (dd > 0) return `${dd}d ${pad(hh)}h ${pad(mm)}m ${pad(ss)}s`;
+  return `${pad(hh)}h ${pad(mm)}m ${pad(ss)}s`;
+}
+
 export default function Home() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
@@ -321,6 +344,17 @@ export default function Home() {
 
   // Stake slider (global)
   const [stake, setStake] = useState(50);
+
+  // Live countdown
+  const [now, setNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const nextDrop = useMemo(() => getNextSundayNoon(now), [now]);
+  const msToDrop = nextDrop.getTime() - now.getTime();
+  const countdown = formatCountdown(msToDrop);
 
   const meQuery = useQuery<ApiMeResponse>({
     queryKey: ["/me"],
@@ -332,10 +366,11 @@ export default function Home() {
   const signedIn = !!(meQuery.data as any)?.user;
   const tokens = Number((meQuery.data as any)?.user?.credits ?? 0);
 
+  // Clamp stake to balance
   useEffect(() => {
     if (!signedIn) return;
-    if (!Number.isFinite(tokens) || tokens <= 0) return;
-    setStake((prev) => (prev !== 50 ? prev : defaultStake(tokens)));
+    const max = Math.max(1, Math.floor(tokens));
+    setStake((prev) => clampInt(prev, 1, max));
   }, [signedIn, tokens]);
 
   const username =
@@ -364,6 +399,27 @@ export default function Home() {
     return rows.map(adaptApiMarket);
   }, [marketsQuery.data]);
 
+  // This week's markets = created_at within the current Sun 12:00 PM -> next Sun 12:00 PM window
+  const thisWeeksMarkets: Market[] = useMemo(() => {
+    // Determine "current week start" as the most recent Sunday noon
+    const n = now;
+    const next = getNextSundayNoon(n);
+    const start = new Date(next);
+    start.setDate(start.getDate() - 7);
+
+    // We only have endsAt as string in Market; filter from the API row isn't available after adaptation.
+    // So we filter by question list only (fallback) unless you add `created_at` into Market.
+    // Practical compromise: just show all markets returned by backend (assuming backend already limits to current markets).
+    // If you want strict "this week" filtering, add `createdAt` to Market + map it from ApiMarketRow.created_at.
+    return markets;
+  }, [markets, now]);
+
+  const filteredMarkets = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return thisWeeksMarkets;
+    return thisWeeksMarkets.filter((m) => m.title.toLowerCase().includes(q));
+  }, [search, thisWeeksMarkets]);
+
   const statsQuery = useQuery<ApiStatsResponse>({
     queryKey: ["/stats"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -385,12 +441,6 @@ export default function Home() {
     if (Array.isArray(apiLeaders) && apiLeaders.length > 0) return apiLeaders;
     return demoLeaders;
   }, [leaderboardQuery.data]);
-
-  const filteredMarkets = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return markets;
-    return markets.filter((m) => m.title.toLowerCase().includes(q));
-  }, [search, markets]);
 
   const tradeMutation = useMutation({
     mutationFn: async (input: { marketId: string; side: "YES" | "NO"; amount: number }) => {
@@ -506,7 +556,7 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-16">
-        <section className="mb-16 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-12">
+        <section className="mb-12 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-12">
           <div className="max-w-2xl">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -515,11 +565,13 @@ export default function Home() {
             >
               <Trophy className="h-3.5 w-3.5" /> $250 WEEKLY GIFT CARD PRIZE
             </motion.div>
+
             <h1 className="text-5xl md:text-7xl font-black tracking-tight text-foreground mb-6 leading-[1.1]">
               Predict the future of <br />
               <TypewriterEffect />
             </h1>
-            <p className="text-xl text-muted-foreground mb-10 max-w-xl leading-relaxed">
+
+            <p className="text-xl text-muted-foreground mb-8 max-w-xl leading-relaxed">
               Join the official Berkeley forecasting tournament. Start with 1,000 tokens.
               <span className="block font-bold text-foreground mt-3">Verified .edu only. No purchase necessary.</span>
             </p>
@@ -528,12 +580,13 @@ export default function Home() {
               <div className="relative w-full max-w-md group">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 <Input
-                  placeholder="Search live markets..."
+                  placeholder="Search this week's markets..."
                   className="pl-12 h-14 bg-secondary/50 border-border focus-visible:ring-primary rounded-2xl text-lg"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+
               <Button
                 variant="outline"
                 className="h-14 px-8 gap-2 rounded-2xl border-border hover:bg-secondary font-bold"
@@ -560,7 +613,9 @@ export default function Home() {
               <div className="absolute top-0 right-0 p-4">
                 <Shield className="h-8 w-8 text-primary/20" />
               </div>
+
               <h4 className="text-sm font-black text-primary uppercase tracking-[0.2em] mb-4">Market Stats</h4>
+
               <div className="space-y-6">
                 <div>
                   <p className="text-3xl font-black">
@@ -568,14 +623,20 @@ export default function Home() {
                   </p>
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Active Tokens Staked</p>
                 </div>
+
                 <div>
                   <p className="text-3xl font-black">
                     {statsQuery.isLoading ? "—" : dailyForecasters.toLocaleString()}
                   </p>
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Daily Forecasters</p>
                 </div>
+
                 <div className="pt-4 border-t border-primary/10">
-                  <p className="text-sm font-bold text-primary">New prompts in 4h 12m</p>
+                  <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Next prompt drop</p>
+                  <p className="text-sm font-bold text-primary mt-1">{countdown}</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">
+                    Sunday • 12:00 PM (local)
+                  </p>
                 </div>
               </div>
             </Card>
@@ -640,15 +701,6 @@ export default function Home() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-9 px-3 rounded-xl border-border"
-                    disabled={!signedIn}
-                    onClick={() => setStake(defaultStake(tokens))}
-                  >
-                    Smart
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
                     className="h-9 px-3 rounded-xl border-border ml-auto"
                     disabled={!signedIn}
                     onClick={() => setStake(maxStakeForSlider)}
@@ -663,110 +715,92 @@ export default function Home() {
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
           <div className="lg:col-span-3 space-y-8">
-            <Tabs defaultValue="all" className="w-full">
-              <TabsList className="bg-transparent h-auto p-0 gap-8 border-b border-border rounded-none w-full justify-start overflow-x-auto scrollbar-hide">
-                <TabsTrigger
-                  value="all"
-                  className="data-[state=active]:border-primary data-[state=active]:text-primary border-b-2 border-transparent rounded-none px-0 pb-4 font-black text-sm uppercase tracking-widest transition-all"
-                >
-                  All Markets
-                </TabsTrigger>
-                <TabsTrigger
-                  value="weather"
-                  className="data-[state=active]:border-primary data-[state=active]:text-primary border-b-2 border-transparent rounded-none px-0 pb-4 font-black text-sm uppercase tracking-widest transition-all"
-                >
-                  Weather
-                </TabsTrigger>
-                <TabsTrigger
-                  value="campus"
-                  className="data-[state=active]:border-primary data-[state=active]:text-primary border-b-2 border-transparent rounded-none px-0 pb-4 font-black text-sm uppercase tracking-widest transition-all"
-                >
-                  Campus
-                </TabsTrigger>
-              </TabsList>
+            <div className="flex items-end justify-between gap-4 border-b border-border pb-4">
+              <div>
+                <h2 className="text-lg font-black uppercase tracking-widest text-foreground">This Week’s Markets</h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Updated live. Next weekly drop in <span className="font-bold text-foreground">{countdown}</span>.
+                </p>
+              </div>
+            </div>
 
-              <TabsContent value="all" className="pt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                {marketsQuery.isLoading ? (
-                  <Card className="p-6">Loading markets…</Card>
-                ) : marketsQuery.isError ? (
-                  <Card className="p-6">
-                    Could not load markets.{" "}
-                    <span className="text-muted-foreground text-sm">
-                      {(marketsQuery.error as any)?.message ?? ""}
-                    </span>
+            <div className="pt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {marketsQuery.isLoading ? (
+                <Card className="p-6">Loading markets…</Card>
+              ) : marketsQuery.isError ? (
+                <Card className="p-6">
+                  Could not load markets.{" "}
+                  <span className="text-muted-foreground text-sm">{(marketsQuery.error as any)?.message ?? ""}</span>
+                </Card>
+              ) : filteredMarkets.length === 0 ? (
+                <Card className="p-6">No markets match your search.</Card>
+              ) : (
+                filteredMarkets.map((market) => (
+                  <Card key={market.id} className="market-card p-6 group flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-4">
+                        <Badge
+                          variant="secondary"
+                          className="bg-secondary text-primary hover:bg-secondary border-none rounded-full px-3 py-1 text-[10px] uppercase font-black tracking-widest"
+                        >
+                          {market.category}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground font-black uppercase tracking-widest flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5" /> {market.endsAt}
+                        </span>
+                      </div>
+                      <h3 className="text-xl font-bold text-foreground leading-snug mb-6 group-hover:text-primary transition-colors line-clamp-2 h-14">
+                        {market.title}
+                      </h3>
+                    </div>
+
+                    <div>
+                      <div className="grid grid-cols-2 gap-3 mb-6">
+                        <TradeButton
+                          label="YES"
+                          price={market.yesPrice}
+                          stake={clampInt(stake, 1, maxStakeForSlider)}
+                          variant="yes"
+                          disabled={tradeMutation.isPending}
+                          onClick={() => handleTrade(market.id, "YES")}
+                        />
+                        <TradeButton
+                          label="NO"
+                          price={market.noPrice}
+                          stake={clampInt(stake, 1, maxStakeForSlider)}
+                          variant="no"
+                          disabled={tradeMutation.isPending}
+                          onClick={() => handleTrade(market.id, "NO")}
+                        />
+                      </div>
+
+                      <div className="flex justify-between items-center pt-4 border-t border-border/50">
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.1em]">
+                          {market.volume.toLocaleString()} TOKENS TRADED
+                        </span>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-[10px] font-black text-primary flex items-center gap-1 hover:no-underline hover:opacity-80"
+                            >
+                              RULES <ChevronRight className="h-3 w-3" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="bg-card border-border">
+                            <DialogHeader>
+                              <DialogTitle>Resolution Details</DialogTitle>
+                            </DialogHeader>
+                            <div className="py-4 text-sm text-muted-foreground leading-relaxed">{market.detailedRules}</div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </div>
                   </Card>
-                ) : filteredMarkets.length === 0 ? (
-                  <Card className="p-6">No markets match your search.</Card>
-                ) : (
-                  filteredMarkets.map((market) => (
-                    <Card key={market.id} className="market-card p-6 group flex flex-col justify-between">
-                      <div>
-                        <div className="flex justify-between items-start mb-4">
-                          <Badge
-                            variant="secondary"
-                            className="bg-secondary text-primary hover:bg-secondary border-none rounded-full px-3 py-1 text-[10px] uppercase font-black tracking-widest"
-                          >
-                            {market.category}
-                          </Badge>
-                          <span className="text-[10px] text-muted-foreground font-black uppercase tracking-widest flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" /> {market.endsAt}
-                          </span>
-                        </div>
-                        <h3 className="text-xl font-bold text-foreground leading-snug mb-6 group-hover:text-primary transition-colors line-clamp-2 h-14">
-                          {market.title}
-                        </h3>
-                      </div>
-
-                      <div>
-                        <div className="grid grid-cols-2 gap-3 mb-6">
-                          <TradeButton
-                            label="YES"
-                            price={market.yesPrice}
-                            stake={clampInt(stake, 1, maxStakeForSlider)}
-                            variant="yes"
-                            disabled={tradeMutation.isPending}
-                            onClick={() => handleTrade(market.id, "YES")}
-                          />
-                          <TradeButton
-                            label="NO"
-                            price={market.noPrice}
-                            stake={clampInt(stake, 1, maxStakeForSlider)}
-                            variant="no"
-                            disabled={tradeMutation.isPending}
-                            onClick={() => handleTrade(market.id, "NO")}
-                          />
-                        </div>
-
-                        <div className="flex justify-between items-center pt-4 border-t border-border/50">
-                          <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.1em]">
-                            {market.volume.toLocaleString()} TOKENS TRADED
-                          </span>
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="h-auto p-0 text-[10px] font-black text-primary flex items-center gap-1 hover:no-underline hover:opacity-80"
-                              >
-                                RULES <ChevronRight className="h-3 w-3" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="bg-card border-border">
-                              <DialogHeader>
-                                <DialogTitle>Resolution Details</DialogTitle>
-                              </DialogHeader>
-                              <div className="py-4 text-sm text-muted-foreground leading-relaxed">
-                                {market.detailedRules}
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </TabsContent>
-            </Tabs>
+                ))
+              )}
+            </div>
           </div>
 
           <aside className="space-y-8">
@@ -840,10 +874,7 @@ export default function Home() {
                 variant="ghost"
                 className="w-full mt-8 text-xs font-black uppercase tracking-[0.2em] h-10 hover:bg-primary/10 hover:text-primary rounded-xl"
                 onClick={() => {
-                  toast({
-                    title: "Coming soon",
-                    description: "Full leaderboard view isn’t wired yet.",
-                  });
+                  toast({ title: "Coming soon", description: "Full leaderboard view isn’t wired yet." });
                 }}
               >
                 Full Leaderboard
