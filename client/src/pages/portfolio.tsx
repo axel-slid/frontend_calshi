@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { motion } from "framer-motion";
 import {
   ArrowLeft,
   TrendingUp,
@@ -17,7 +16,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 
-type ApiMeResponse = { user: { id: string; email: string; username?: string | null; credits: number } };
+type ApiMeResponse = {
+  user: { id: string; email: string; username?: string | null; credits: number };
+};
 type ApiTradesResponse = { trades: ApiTrade[] };
 type ApiMarketsResponse = { markets: ApiMarket[] };
 
@@ -104,9 +105,6 @@ export default function PortfolioPage() {
     return Array.from(agg.values()).sort((a, b) => b.amount - a.amount);
   }, [trades, marketTitleById]);
 
-  // Pricing/settlement isn't in your schema yet; keep P/L as 0 for now.
-  const totalPnL = 0;
-
   // Pretty timestamp helper
   function formatTime(ts: string) {
     const d = new Date(ts);
@@ -116,8 +114,6 @@ export default function PortfolioPage() {
 
   // If unauthorized, send to /auth
   if (meQuery.isError) {
-    // 401 will be thrown by getQueryFn; simplest UX: redirect to auth
-    // (avoid infinite loops if auth itself calls /me in future)
     setTimeout(() => setLocation("/auth"), 0);
   }
 
@@ -126,7 +122,10 @@ export default function PortfolioPage() {
       <header className="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-50">
         <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
           <Link href="/">
-            <Button variant="ghost" className="gap-2 -ml-2 text-muted-foreground hover:text-foreground">
+            <Button
+              variant="ghost"
+              className="gap-2 -ml-2 text-muted-foreground hover:text-foreground"
+            >
               <ArrowLeft className="h-4 w-4" />
               Back to Markets
             </Button>
@@ -135,17 +134,21 @@ export default function PortfolioPage() {
             <div className="h-8 w-8 bg-accent text-accent-foreground rounded flex items-center justify-center font-black">
               C
             </div>
-            <span className="font-black uppercase tracking-tighter">Portfolio</span>
+            <span className="font-black uppercase tracking-tighter">
+              Portfolio
+            </span>
           </div>
           <div className="w-24"></div>
         </div>
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
           <Card className="frost noise p-6 border-accent/20">
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Available Balance</span>
+              <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
+                Available Balance
+              </span>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-black">
                   {meQuery.isLoading ? "—" : credits.toLocaleString()}
@@ -157,29 +160,17 @@ export default function PortfolioPage() {
 
           <Card className="frost noise p-6">
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Active Stake</span>
+              <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
+                Active Stake
+              </span>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-black">
                   {tradesQuery.isLoading ? "—" : activeStake.toLocaleString()}
                 </span>
-                <span className="text-xs font-mono text-muted-foreground">TOKENS</span>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="frost noise p-6">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Total P/L</span>
-              <div className="flex items-baseline gap-2">
-                <span className={`text-3xl font-black ${totalPnL >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  {totalPnL >= 0 ? "+" : ""}
-                  {totalPnL.toLocaleString()}
+                <span className="text-xs font-mono text-muted-foreground">
+                  TOKENS
                 </span>
-                <span className="text-xs font-mono text-muted-foreground">TOKENS</span>
               </div>
-              <p className="mt-2 text-[10px] text-muted-foreground uppercase tracking-widest">
-                P/L requires live pricing & settlement (not in schema yet)
-              </p>
             </div>
           </Card>
         </div>
@@ -200,13 +191,20 @@ export default function PortfolioPage() {
             {tradesQuery.isLoading || marketsQuery.isLoading ? (
               <Card className="frost noise p-6">Loading holdings…</Card>
             ) : positions.length === 0 ? (
-              <Card className="frost noise p-6">No holdings yet. Place a trade to get started.</Card>
+              <Card className="frost noise p-6">
+                No holdings yet. Place a trade to get started.
+              </Card>
             ) : (
               positions.map((pos) => (
-                <Card key={pos.id} className="frost noise p-6 group hover:border-accent/30 transition-colors">
+                <Card
+                  key={pos.id}
+                  className="frost noise p-6 group hover:border-accent/30 transition-colors"
+                >
                   <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                     <div className="space-y-1">
-                      <h3 className="font-bold text-lg group-hover:text-accent transition-colors">{pos.marketTitle}</h3>
+                      <h3 className="font-bold text-lg group-hover:text-accent transition-colors">
+                        {pos.marketTitle}
+                      </h3>
                       <div className="flex gap-2 items-center">
                         <Badge
                           variant="outline"
@@ -226,17 +224,20 @@ export default function PortfolioPage() {
 
                     <div className="flex items-center gap-8 border-t md:border-t-0 pt-4 md:pt-0 border-border">
                       <div className="text-right">
-                        <p className="text-xs font-mono text-muted-foreground uppercase">Stake</p>
-                        <p className="font-bold">{pos.amount.toLocaleString()} tokens</p>
+                        <p className="text-xs font-mono text-muted-foreground uppercase">
+                          Stake
+                        </p>
+                        <p className="font-bold">
+                          {pos.amount.toLocaleString()} tokens
+                        </p>
                       </div>
 
-                      {/* placeholder for future P/L */}
-                      <div className="text-right">
-                        <p className="text-xs font-mono text-muted-foreground uppercase">Profit/Loss</p>
-                        <p className="font-black text-muted-foreground">—</p>
-                      </div>
-
-                      <Button size="icon" variant="ghost" className="hidden md:flex" disabled>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="hidden md:flex"
+                        disabled
+                      >
                         <ExternalLink className="h-4 w-4" />
                       </Button>
                     </div>
@@ -259,25 +260,39 @@ export default function PortfolioPage() {
                     const amount = Number(tx.amount ?? 0);
                     const isDebit = amount > 0; // trading spends tokens
                     return (
-                      <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                      <div
+                        key={tx.id}
+                        className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+                      >
                         <div className="flex items-center gap-4">
                           <div
                             className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                              isDebit ? "bg-red-400/10 text-red-400" : "bg-green-400/10 text-green-400"
+                              isDebit
+                                ? "bg-red-400/10 text-red-400"
+                                : "bg-green-400/10 text-green-400"
                             }`}
                           >
-                            {isDebit ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                            {isDebit ? (
+                              <ArrowUpRight className="h-5 w-5" />
+                            ) : (
+                              <ArrowDownRight className="h-5 w-5" />
+                            )}
                           </div>
                           <div>
                             <p className="font-bold">
                               Bought {tx.side} • {title}
                             </p>
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Clock className="h-3 w-3" /> {formatTime(tx.created_at)}
+                              <Clock className="h-3 w-3" />{" "}
+                              {formatTime(tx.created_at)}
                             </p>
                           </div>
                         </div>
-                        <span className={`font-mono font-bold ${isDebit ? "text-red-400" : "text-green-400"}`}>
+                        <span
+                          className={`font-mono font-bold ${
+                            isDebit ? "text-red-400" : "text-green-400"
+                          }`}
+                        >
                           {isDebit ? "-" : "+"}
                           {amount.toLocaleString()}
                         </span>
