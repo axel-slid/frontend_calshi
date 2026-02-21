@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import Home from "./pages/home";
 import AuthPage from "./pages/auth";
 import PortfolioPage from "./pages/portfolio";
+import LeaderboardPage from "./pages/leaderboard";
 
 function Router() {
   return (
@@ -14,6 +15,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/portfolio" component={PortfolioPage} />
+      <Route path="/leaderboard" component={LeaderboardPage} />
       <Route component={NotFound} />
     </Switch>
   );
