@@ -180,7 +180,7 @@ function RulesModal({
                 4
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Contest End:</strong> Weekly contest ends Friday at 5:00 PM PST.
+                <strong className="text-foreground">Contest End:</strong> Weekly contest.
               </p>
             </div>
           </div>
@@ -644,7 +644,7 @@ export default function Home() {
           </div>
         </div>
       </header>
-
+<!--
       <main className="mx-auto max-w-7xl px-4 py-16">
         {/* CONTEST COUNTDOWN BANNER */}
         <section className="mb-10">
@@ -672,7 +672,7 @@ export default function Home() {
             </div>
           </Card>
         </section>
-
+-->
         <section className="mb-12 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-12">
           <div className="max-w-2xl">
             <motion.div
