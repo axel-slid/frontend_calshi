@@ -338,16 +338,9 @@ function TradeButton({
   );
 }
 
-/**
- * Returns the next Friday at 5:00 PM PST (America/Los_Angeles) in UTC milliseconds.
- * If it's already past Friday 5 PM PST this week, returns next week's Friday 5 PM PST.
- *
- * We avoid relying on local browser timezone by using Intl timeZone conversions.
- */
 function getNextFriday5pmPstUtcMs(now: Date) {
   const tz = "America/Los_Angeles";
 
-  // Extract PST "date parts" for now
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     year: "numeric",
@@ -365,31 +358,21 @@ function getNextFriday5pmPstUtcMs(now: Date) {
   const year = Number(get("year"));
   const month = Number(get("month"));
   const day = Number(get("day"));
-  const weekday = String(get("weekday")); // e.g., "Fri"
+  const weekday = String(get("weekday"));
   const hour = Number(get("hour"));
   const minute = Number(get("minute"));
 
-  // Map weekday to 0..6 (Sun..Sat)
   const wdMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
   const pstDow = wdMap[weekday] ?? 0;
 
-  // Calculate days until Friday (5)
   let daysUntilFri = (5 - pstDow + 7) % 7;
-
-  // If today is Friday and it's already >= 17:00 PST, go to next week
   if (pstDow === 5 && (hour > 17 || (hour === 17 && minute >= 0))) {
     daysUntilFri = 7;
   }
 
-  // Build a PST-local date string for target Friday 17:00:00
-  // We create a "PST date" by adding days in PST calendar terms:
-  // Step 1: create a JS Date at current PST midnight by using the PST date parts as if UTC,
-  // then adjust with formatter to get the correct UTC moment. Easiest: iterate by days from "today" in UTC
-  // while using the PST date parts. Here we do a stable approach:
-  const basePstDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0)); // midday UTC to avoid DST edge
+  const basePstDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
   const targetPstMidday = new Date(basePstDate.getTime() + daysUntilFri * 24 * 60 * 60 * 1000);
 
-  // Extract target PST Y/M/D after adding days
   const targetParts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     year: "numeric",
@@ -402,12 +385,8 @@ function getNextFriday5pmPstUtcMs(now: Date) {
   const tm = Number(targetParts.find((p) => p.type === "month")?.value);
   const td = Number(targetParts.find((p) => p.type === "day")?.value);
 
-  // Now: find the UTC instant corresponding to ty-tm-td 17:00:00 in America/Los_Angeles
-  // We approximate by starting with UTC and then correcting using the timezone offset at that moment.
-  // Start with "17:00 UTC" placeholder, then use formatter to compute actual offset.
   const approxUtc = new Date(Date.UTC(ty, tm - 1, td, 17, 0, 0));
 
-  // Compute PST clock time of approxUtc; if it's not 17:00 PST, adjust.
   const clockParts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     hour: "2-digit",
@@ -419,9 +398,7 @@ function getNextFriday5pmPstUtcMs(now: Date) {
   const pstH = Number(clockParts.find((p) => p.type === "hour")?.value);
   const pstM = Number(clockParts.find((p) => p.type === "minute")?.value);
 
-  // Difference between desired (17:00) and current PST clock time
   const diffMinutes = (17 - pstH) * 60 + (0 - pstM);
-
   const correctedUtc = new Date(approxUtc.getTime() + diffMinutes * 60 * 1000);
   return correctedUtc.getTime();
 }
@@ -514,7 +491,6 @@ export default function Home() {
     return rows.map(adaptApiMarket);
   }, [marketsQuery.data]);
 
-  // This week's markets = backend should already return this week's markets
   const thisWeeksMarkets: Market[] = useMemo(() => {
     return markets;
   }, [markets]);
@@ -624,18 +600,27 @@ export default function Home() {
             </div>
           </Link>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {signedIn ? (
               <>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-foreground">{username}</span>
+                {/* USER MENU BUTTON: "dils • points • My Holdings" */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-full border-border bg-secondary/40 hover:bg-secondary/70 font-black"
+                    onClick={() => setLocation("/portfolio")}
+                  >
+                    {username}
+                    <span className="mx-2 text-muted-foreground font-black">•</span>
+                    {tokens.toLocaleString()}
+                  </Button>
 
-                  <Link href="/portfolio">
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary hover:bg-secondary/80 transition-all cursor-pointer border border-border">
-                      <TrendingUp className="h-4 w-4 text-primary" />
-                      <span className="font-bold text-sm">{tokens.toLocaleString()}</span>
-                    </div>
-                  </Link>
+                  <Button
+                    className="h-11 rounded-full bg-primary hover:bg-primary/90 text-white font-black px-6"
+                    onClick={() => setLocation("/portfolio")}
+                  >
+                    My Holdings
+                  </Button>
                 </div>
 
                 <Button
@@ -753,14 +738,18 @@ export default function Home() {
                   <p className="text-3xl font-black">
                     {statsQuery.isLoading ? "—" : activeTokensStaked.toLocaleString()}
                   </p>
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Active Tokens Staked</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Active Tokens Staked
+                  </p>
                 </div>
 
                 <div>
                   <p className="text-3xl font-black">
                     {statsQuery.isLoading ? "—" : dailyForecasters.toLocaleString()}
                   </p>
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Daily Forecasters</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Daily Forecasters
+                  </p>
                 </div>
 
                 <div className="pt-4 border-t border-primary/10">
