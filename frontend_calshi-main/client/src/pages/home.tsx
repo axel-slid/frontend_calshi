@@ -12,10 +12,13 @@ import {
   ChevronRight,
   TrendingUp,
   Mail,
+  ArrowBigUp,
+  ArrowBigDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
@@ -53,6 +56,19 @@ type ApiMarketRow = {
 };
 
 type ApiMarketsResponse = { markets: ApiMarketRow[] };
+
+type ApiSuggestionRow = {
+  id: string;
+  title: string;
+  details: string;
+  created_at: string;
+  score: number;
+  upvotes: number;
+  downvotes: number;
+  viewer_vote: number; // 1, -1, or 0
+};
+
+type ApiSuggestionsResponse = { suggestions: ApiSuggestionRow[] };
 
 type ApiStatsResponse = {
   activeTokensStaked: number;
@@ -163,6 +179,64 @@ function RulesModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open
   );
 }
 
+function SuggestionCreateDialog({
+  onSubmit,
+  isSubmitting,
+}: {
+  onSubmit: (title: string, details: string) => Promise<void> | void;
+  isSubmitting: boolean;
+}) {
+  const [title, setTitle] = useState("");
+  const [details, setDetails] = useState("");
+
+  return (
+    <DialogContent className="max-w-xl bg-card border-border">
+      <DialogHeader>
+        <DialogTitle>New Market Suggestion</DialogTitle>
+        <DialogDescription>
+          Post an idea for a future market. Your identity is not shown to other users.
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-4 py-2">
+        <div className="space-y-2">
+          <div className="text-sm font-black">Title</div>
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g., Will the RSF hit capacity before 6pm today?"
+            className="rounded-xl"
+          />
+          <div className="text-xs text-muted-foreground">5–140 characters</div>
+        </div>
+        <div className="space-y-2">
+          <div className="text-sm font-black">Details (optional)</div>
+          <Textarea
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
+            placeholder="Add context, resolution criteria, links, etc."
+            className="rounded-xl min-h-[140px]"
+          />
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button
+          className="w-full rounded-xl font-black"
+          disabled={isSubmitting || title.trim().length < 5 || title.trim().length > 140}
+          onClick={async () => {
+            await onSubmit(title.trim(), details.trim());
+            setTitle("");
+            setDetails("");
+          }}
+        >
+          {isSubmitting ? "Submitting…" : "Submit"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
 // Client-side adapter because your Supabase `markets` table (per screenshot) only has:
 // id, question, status, created_at. Volume is computed server-side.
 function adaptApiMarket(m: ApiMarketRow): Market {
@@ -215,6 +289,12 @@ export default function Home() {
     queryFn: getQueryFn({ on401: "throw" }),
   });
 
+  // Suggestions
+  const suggestionsQuery = useQuery<ApiSuggestionsResponse>({
+    queryKey: ["/markets/suggestions"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
   const markets: Market[] = useMemo(() => {
     const rows = marketsQuery.data?.markets ?? [];
     return rows.map(adaptApiMarket);
@@ -248,6 +328,28 @@ export default function Home() {
     },
   });
 
+  const createSuggestionMutation = useMutation({
+    mutationFn: async (input: { title: string; details?: string }) => {
+      const res = await apiRequest("POST", "/markets/suggestions", input);
+      return await res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/markets/suggestions"] });
+    },
+  });
+
+  const voteMutation = useMutation({
+    mutationFn: async (input: { suggestionId: string; value: 1 | -1 | 0 }) => {
+      const res = await apiRequest("POST", `/markets/suggestions/${input.suggestionId}/vote`, {
+        value: input.value,
+      });
+      return await res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/markets/suggestions"] });
+    },
+  });
+
   async function handleTrade(marketId: string, side: "YES" | "NO") {
     if (!signedIn) {
       setLocation("/auth");
@@ -263,6 +365,25 @@ export default function Home() {
       const msg = typeof e?.message === "string" ? e.message : "Could not place trade.";
       toast({ title: "Trade failed", description: msg, variant: "destructive" });
     }
+  }
+
+  async function handleCreateSuggestion(title: string, details: string) {
+    if (!signedIn) {
+      setLocation("/auth");
+      return;
+    }
+    await createSuggestionMutation.mutateAsync({ title, details });
+    toast({ title: "Submitted", description: "Suggestion posted (anonymously)." });
+  }
+
+  async function handleVote(suggestion: ApiSuggestionRow, nextValue: 1 | -1) {
+    if (!signedIn) {
+      setLocation("/auth");
+      return;
+    }
+    const current = Number(suggestion.viewer_vote ?? 0) as 1 | -1 | 0;
+    const value: 1 | -1 | 0 = current === nextValue ? 0 : nextValue;
+    await voteMutation.mutateAsync({ suggestionId: suggestion.id, value });
   }
 
   return (
@@ -409,6 +530,12 @@ export default function Home() {
                 >
                   Campus
                 </TabsTrigger>
+                <TabsTrigger
+                  value="suggestions"
+                  className="data-[state=active]:border-primary data-[state=active]:text-primary border-b-2 border-transparent rounded-none px-0 pb-4 font-black text-sm uppercase tracking-widest transition-all"
+                >
+                  Suggestions
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="all" className="pt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -489,6 +616,98 @@ export default function Home() {
                       </div>
                     </Card>
                   ))
+                )}
+              </TabsContent>
+
+              <TabsContent value="suggestions" className="pt-8 space-y-6">
+                <Card className="p-6">
+                  <div className="flex items-start justify-between gap-6 flex-col md:flex-row">
+                    <div className="space-y-1">
+                      <h3 className="text-lg font-black">Suggest a Market</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Suggestions are shown without your identity. Votes help decide what markets to create.
+                      </p>
+                    </div>
+
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button className="rounded-xl font-black">New Suggestion</Button>
+                      </DialogTrigger>
+                      <SuggestionCreateDialog
+                        onSubmit={handleCreateSuggestion}
+                        isSubmitting={createSuggestionMutation.isPending}
+                      />
+                    </Dialog>
+                  </div>
+                </Card>
+
+                {suggestionsQuery.isLoading ? (
+                  <Card className="p-6">Loading suggestions…</Card>
+                ) : suggestionsQuery.isError ? (
+                  <Card className="p-6">
+                    Could not load suggestions.{" "}
+                    <span className="text-muted-foreground text-sm">
+                      {(suggestionsQuery.error as any)?.message ?? ""}
+                    </span>
+                  </Card>
+                ) : (suggestionsQuery.data?.suggestions ?? []).length === 0 ? (
+                  <Card className="p-6">No suggestions yet. Be the first.</Card>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {(suggestionsQuery.data?.suggestions ?? []).map((s) => {
+                      const upActive = Number(s.viewer_vote ?? 0) === 1;
+                      const downActive = Number(s.viewer_vote ?? 0) === -1;
+
+                      return (
+                        <Card key={s.id} className="p-6">
+                          <div className="flex gap-4">
+                            <div className="flex flex-col items-center gap-2 shrink-0">
+                              <Button
+                                variant={upActive ? "default" : "outline"}
+                                size="icon"
+                                className="rounded-xl"
+                                disabled={voteMutation.isPending}
+                                onClick={() => handleVote(s, 1)}
+                                aria-label="Upvote"
+                              >
+                                <ArrowBigUp className="h-5 w-5" />
+                              </Button>
+                              <div className="font-black text-lg">{Number(s.score ?? 0)}</div>
+                              <Button
+                                variant={downActive ? "default" : "outline"}
+                                size="icon"
+                                className="rounded-xl"
+                                disabled={voteMutation.isPending}
+                                onClick={() => handleVote(s, -1)}
+                                aria-label="Downvote"
+                              >
+                                <ArrowBigDown className="h-5 w-5" />
+                              </Button>
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-4">
+                                <h4 className="font-black text-base leading-snug break-words">{s.title}</h4>
+                                <span className="text-[10px] text-muted-foreground font-black uppercase tracking-widest shrink-0">
+                                  {new Date(s.created_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                              {s.details ? (
+                                <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap break-words">
+                                  {s.details}
+                                </p>
+                              ) : null}
+
+                              <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
+                                <span className="font-black">{Number(s.upvotes ?? 0)} up</span>
+                                <span className="font-black">{Number(s.downvotes ?? 0)} down</span>
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
                 )}
               </TabsContent>
 
