@@ -125,7 +125,13 @@ function TypewriterEffect() {
   );
 }
 
-function RulesModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function RulesModal({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl bg-card border-border">
@@ -280,12 +286,24 @@ function TradeButton({
       <div className="flex flex-col items-center leading-none">
         <div className="flex items-baseline gap-2">
           <span className="text-lg">{label}</span>
-          <span className={variant === "yes" ? "text-white/80 text-sm font-extrabold" : "text-muted-foreground text-sm font-extrabold"}>
+          <span
+            className={
+              variant === "yes"
+                ? "text-white/80 text-sm font-extrabold"
+                : "text-muted-foreground text-sm font-extrabold"
+            }
+          >
             {pct}%
           </span>
         </div>
 
-        <div className={variant === "yes" ? "mt-2 text-[11px] font-extrabold text-white/85" : "mt-2 text-[11px] font-extrabold text-muted-foreground"}>
+        <div
+          className={
+            variant === "yes"
+              ? "mt-2 text-[11px] font-extrabold text-white/85"
+              : "mt-2 text-[11px] font-extrabold text-muted-foreground"
+          }
+        >
           {payout == null ? (
             <>Stake → Payout —</>
           ) : (
@@ -399,20 +417,10 @@ export default function Home() {
     return rows.map(adaptApiMarket);
   }, [marketsQuery.data]);
 
-  // This week's markets = created_at within the current Sun 12:00 PM -> next Sun 12:00 PM window
+  // This week's markets = backend should already return this week's markets
   const thisWeeksMarkets: Market[] = useMemo(() => {
-    // Determine "current week start" as the most recent Sunday noon
-    const n = now;
-    const next = getNextSundayNoon(n);
-    const start = new Date(next);
-    start.setDate(start.getDate() - 7);
-
-    // We only have endsAt as string in Market; filter from the API row isn't available after adaptation.
-    // So we filter by question list only (fallback) unless you add `created_at` into Market.
-    // Practical compromise: just show all markets returned by backend (assuming backend already limits to current markets).
-    // If you want strict "this week" filtering, add `createdAt` to Market + map it from ApiMarketRow.created_at.
     return markets;
-  }, [markets, now]);
+  }, [markets]);
 
   const filteredMarkets = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -792,7 +800,9 @@ export default function Home() {
                             <DialogHeader>
                               <DialogTitle>Resolution Details</DialogTitle>
                             </DialogHeader>
-                            <div className="py-4 text-sm text-muted-foreground leading-relaxed">{market.detailedRules}</div>
+                            <div className="py-4 text-sm text-muted-foreground leading-relaxed">
+                              {market.detailedRules}
+                            </div>
                           </DialogContent>
                         </Dialog>
                       </div>
@@ -812,7 +822,7 @@ export default function Home() {
                 </p>
                 <div className="flex gap-2">
                   <Input
-                    value={signedIn ? (inviteCode || "—") : "Sign in to get a code"}
+                    value={signedIn ? inviteCode || "—" : "Sign in to get a code"}
                     readOnly
                     className="bg-white/20 border-white/10 text-white font-mono text-sm h-11 focus-visible:ring-0"
                   />
@@ -870,15 +880,15 @@ export default function Home() {
                 )}
               </div>
 
-              <Button
-                variant="ghost"
-                className="w-full mt-8 text-xs font-black uppercase tracking-[0.2em] h-10 hover:bg-primary/10 hover:text-primary rounded-xl"
-                onClick={() => {
-                  toast({ title: "Coming soon", description: "Full leaderboard view isn’t wired yet." });
-                }}
-              >
-                Full Leaderboard
-              </Button>
+              {/* UPDATED: wired to /leaderboard */}
+              <Link href="/leaderboard">
+                <Button
+                  variant="ghost"
+                  className="w-full mt-8 text-xs font-black uppercase tracking-[0.2em] h-10 hover:bg-primary/10 hover:text-primary rounded-xl"
+                >
+                  Full Leaderboard
+                </Button>
+              </Link>
             </Card>
           </aside>
         </div>
