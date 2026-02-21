@@ -154,8 +154,7 @@ function RulesModal({
                 1
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Weekly Drop:</strong> New prompts are released every Sunday at 12:00 PM
-                PST.
+                <strong className="text-foreground">Weekly Drop:</strong> New prompts are released every Sunday at 12:00 PM PST.
               </p>
             </div>
             <div className="flex gap-3">
@@ -163,8 +162,7 @@ function RulesModal({
                 2
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Tokens:</strong> Start with 1,000 play tokens. No purchase necessary.
-                No monetary value.
+                <strong className="text-foreground">Tokens:</strong> Start with 1,000 play tokens. No purchase necessary. No monetary value.
               </p>
             </div>
             <div className="flex gap-3">
@@ -180,7 +178,7 @@ function RulesModal({
                 4
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Contest End:</strong> Weekly contest.
+                <strong className="text-foreground">Contest End:</strong> Weekly contest ends Friday at 5:00 PM PST.
               </p>
             </div>
           </div>
@@ -217,7 +215,6 @@ function formatEndsAt(endsAtIso: string | null | undefined) {
 function adaptApiMarket(m: ApiMarketRow): Market {
   const q = (m.question ?? "").trim();
 
-  // You can replace this once you store real categories
   const lowered = q.toLowerCase();
   let category: Market["category"] = "Campus";
   if (lowered.includes("rain") || lowered.includes("weather") || lowered.includes("temperature")) category = "Weather";
@@ -255,7 +252,6 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
-// Spend stake tokens at price p => shares = stake/p; payout = shares if correct
 function calcPayout(stake: number, price: number) {
   const p = Number(price);
   const s = Number(stake);
@@ -302,24 +298,12 @@ function TradeButton({
       <div className="flex flex-col items-center leading-none">
         <div className="flex items-baseline gap-2">
           <span className="text-lg">{label}</span>
-          <span
-            className={
-              variant === "yes"
-                ? "text-white/80 text-sm font-extrabold"
-                : "text-muted-foreground text-sm font-extrabold"
-            }
-          >
+          <span className={variant === "yes" ? "text-white/80 text-sm font-extrabold" : "text-muted-foreground text-sm font-extrabold"}>
             {pct}%
           </span>
         </div>
 
-        <div
-          className={
-            variant === "yes"
-              ? "mt-2 text-[11px] font-extrabold text-white/85"
-              : "mt-2 text-[11px] font-extrabold text-muted-foreground"
-          }
-        >
+        <div className={variant === "yes" ? "mt-2 text-[11px] font-extrabold text-white/85" : "mt-2 text-[11px] font-extrabold text-muted-foreground"}>
           {payout == null ? (
             <>Stake → Payout —</>
           ) : (
@@ -421,20 +405,16 @@ export default function Home() {
   const [showRules, setShowRules] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
 
-  // Stake slider (global)
   const [stake, setStake] = useState(50);
 
-  // Live time tick
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Contest ends next Friday 5PM PST
   const contestEndUtcMs = useMemo(() => getNextFriday5pmPstUtcMs(now), [now]);
-  const msToContestEnd = contestEndUtcMs - now.getTime();
-  const contestCountdown = formatCountdown(msToContestEnd);
+  const contestCountdown = formatCountdown(contestEndUtcMs - now.getTime());
 
   const contestEndLabel = useMemo(() => {
     return new Date(contestEndUtcMs).toLocaleString("en-US", {
@@ -458,7 +438,6 @@ export default function Home() {
   const signedIn = !!(meQuery.data as any)?.user;
   const tokens = Number((meQuery.data as any)?.user?.credits ?? 0);
 
-  // Clamp stake to balance
   useEffect(() => {
     if (!signedIn) return;
     const max = Math.max(1, Math.floor(tokens));
@@ -491,15 +470,11 @@ export default function Home() {
     return rows.map(adaptApiMarket);
   }, [marketsQuery.data]);
 
-  const thisWeeksMarkets: Market[] = useMemo(() => {
-    return markets;
-  }, [markets]);
-
   const filteredMarkets = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return thisWeeksMarkets;
-    return thisWeeksMarkets.filter((m) => m.title.toLowerCase().includes(q));
-  }, [search, thisWeeksMarkets]);
+    if (!q) return markets;
+    return markets.filter((m) => m.title.toLowerCase().includes(q));
+  }, [search, markets]);
 
   const statsQuery = useQuery<ApiStatsResponse>({
     queryKey: ["/stats"],
@@ -603,7 +578,6 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {signedIn ? (
               <>
-                {/* USER MENU BUTTON: "dils • points • My Holdings" */}
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -644,35 +618,28 @@ export default function Home() {
           </div>
         </div>
       </header>
-<!--
+
       <main className="mx-auto max-w-7xl px-4 py-16">
-        {/* CONTEST COUNTDOWN BANNER */}
         <section className="mb-10">
           <Card className="p-5 border-primary/20 bg-primary/5 rounded-[1.75rem]">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div className="flex items-start gap-3">
                 <Trophy className="h-5 w-5 text-primary mt-0.5" />
                 <div>
-                  <div className="text-xs font-black uppercase tracking-widest text-primary">
-                    Weekly Contest Ends
-                  </div>
+                  <div className="text-xs font-black uppercase tracking-widest text-primary">Weekly Contest Ends</div>
                   <div className="text-sm text-muted-foreground mt-1">
                     Friday 5:00 PM PST • {contestEndLabel} PST
                   </div>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                  Time remaining
-                </div>
-                <div className="text-2xl font-black tabular-nums text-foreground">
-                  {contestCountdown}
-                </div>
+                <div className="text-xs font-black uppercase tracking-widest text-muted-foreground">Time remaining</div>
+                <div className="text-2xl font-black tabular-nums text-foreground">{contestCountdown}</div>
               </div>
             </div>
           </Card>
         </section>
--->
+
         <section className="mb-12 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-12">
           <div className="max-w-2xl">
             <motion.div
@@ -735,21 +702,13 @@ export default function Home() {
 
               <div className="space-y-6">
                 <div>
-                  <p className="text-3xl font-black">
-                    {statsQuery.isLoading ? "—" : activeTokensStaked.toLocaleString()}
-                  </p>
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    Active Tokens Staked
-                  </p>
+                  <p className="text-3xl font-black">{statsQuery.isLoading ? "—" : activeTokensStaked.toLocaleString()}</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Active Tokens Staked</p>
                 </div>
 
                 <div>
-                  <p className="text-3xl font-black">
-                    {statsQuery.isLoading ? "—" : dailyForecasters.toLocaleString()}
-                  </p>
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    Daily Forecasters
-                  </p>
+                  <p className="text-3xl font-black">{statsQuery.isLoading ? "—" : dailyForecasters.toLocaleString()}</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Daily Forecasters</p>
                 </div>
 
                 <div className="pt-4 border-t border-primary/10">
@@ -764,7 +723,6 @@ export default function Home() {
           </motion.div>
         </section>
 
-        {/* Stake slider */}
         <section className="mb-10">
           <Card className="p-6 border-border rounded-[1.5rem] bg-secondary/20">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -779,9 +737,7 @@ export default function Home() {
               <div className="w-full md:max-w-md">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Stake</span>
-                  <span className="text-sm font-black text-foreground">
-                    {clampInt(stake, 1, maxStakeForSlider).toLocaleString()}
-                  </span>
+                  <span className="text-sm font-black text-foreground">{clampInt(stake, 1, maxStakeForSlider).toLocaleString()}</span>
                 </div>
 
                 <input
@@ -801,31 +757,13 @@ export default function Home() {
                 </div>
 
                 <div className="flex gap-2 mt-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 px-3 rounded-xl border-border"
-                    disabled={!signedIn}
-                    onClick={() => setStake(10)}
-                  >
+                  <Button type="button" variant="outline" className="h-9 px-3 rounded-xl border-border" disabled={!signedIn} onClick={() => setStake(10)}>
                     10
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 px-3 rounded-xl border-border"
-                    disabled={!signedIn}
-                    onClick={() => setStake(50)}
-                  >
+                  <Button type="button" variant="outline" className="h-9 px-3 rounded-xl border-border" disabled={!signedIn} onClick={() => setStake(50)}>
                     50
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 px-3 rounded-xl border-border ml-auto"
-                    disabled={!signedIn}
-                    onClick={() => setStake(maxStakeForSlider)}
-                  >
+                  <Button type="button" variant="outline" className="h-9 px-3 rounded-xl border-border ml-auto" disabled={!signedIn} onClick={() => setStake(maxStakeForSlider)}>
                     Max
                   </Button>
                 </div>
@@ -840,8 +778,7 @@ export default function Home() {
               <div>
                 <h2 className="text-lg font-black uppercase tracking-widest text-foreground">This Week’s Markets</h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Updated live. Contest ends in{" "}
-                  <span className="font-bold text-foreground">{contestCountdown}</span> (Friday 5:00 PM PST).
+                  Updated live. Contest ends in <span className="font-bold text-foreground">{contestCountdown}</span> (Friday 5:00 PM PST).
                 </p>
               </div>
             </div>
@@ -851,8 +788,7 @@ export default function Home() {
                 <Card className="p-6">Loading markets…</Card>
               ) : marketsQuery.isError ? (
                 <Card className="p-6">
-                  Could not load markets.{" "}
-                  <span className="text-muted-foreground text-sm">{(marketsQuery.error as any)?.message ?? ""}</span>
+                  Could not load markets. <span className="text-muted-foreground text-sm">{(marketsQuery.error as any)?.message ?? ""}</span>
                 </Card>
               ) : filteredMarkets.length === 0 ? (
                 <Card className="p-6">No markets match your search.</Card>
@@ -914,9 +850,7 @@ export default function Home() {
                             <DialogHeader>
                               <DialogTitle>Resolution Details</DialogTitle>
                             </DialogHeader>
-                            <div className="py-4 text-sm text-muted-foreground leading-relaxed">
-                              {market.detailedRules}
-                            </div>
+                            <div className="py-4 text-sm text-muted-foreground leading-relaxed">{market.detailedRules}</div>
                           </DialogContent>
                         </Dialog>
                       </div>
@@ -955,15 +889,10 @@ export default function Home() {
                 </div>
 
                 {signedIn && inviteQuery.isLoading && (
-                  <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">
-                    Generating code…
-                  </div>
+                  <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">Generating code…</div>
                 )}
-
                 {signedIn && inviteQuery.isError && (
-                  <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">
-                    Could not load invite code.
-                  </div>
+                  <div className="mt-3 text-[10px] font-bold text-white/70 uppercase tracking-[0.2em]">Could not load invite code.</div>
                 )}
               </div>
               <div className="absolute -bottom-12 -right-12 h-40 w-40 bg-white/20 rounded-full blur-3xl transition-transform group-hover:scale-125 duration-700" />
@@ -981,9 +910,7 @@ export default function Home() {
                       <span className="text-xs font-black text-muted-foreground w-4">#{i + 1}</span>
                       <span className="font-bold text-sm">{leader.name}</span>
                     </div>
-                    <span className="font-mono text-xs font-black text-primary">
-                      {Number(leader.tokens ?? 0).toLocaleString()}
-                    </span>
+                    <span className="font-mono text-xs font-black text-primary">{Number(leader.tokens ?? 0).toLocaleString()}</span>
                   </div>
                 ))}
 
@@ -1012,9 +939,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-10">
             <img src="/static/logo.png" alt="Calshi" className="h-10 w-auto opacity-80 brightness-110" />
             <div className="flex flex-col items-center md:items-end gap-4">
-              <p className="text-xs font-black text-muted-foreground uppercase tracking-[0.3em]">
-                Verified Berkeley .edu only
-              </p>
+              <p className="text-xs font-black text-muted-foreground uppercase tracking-[0.3em]">Verified Berkeley .edu only</p>
               <div className="flex gap-8 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
                 <a href="/privacy.txt" target="_blank" rel="noopener noreferrer">
                   Privacy Policy
@@ -1022,11 +947,7 @@ export default function Home() {
                 <a href="/terms.txt" target="_blank" rel="noopener noreferrer">
                   Terms of Service
                 </a>
-                <button
-                  type="button"
-                  onClick={() => setShowSupport(true)}
-                  className="hover:text-primary transition-colors"
-                >
+                <button type="button" onClick={() => setShowSupport(true)} className="hover:text-primary transition-colors">
                   Contact Support
                 </button>
               </div>
@@ -1038,7 +959,6 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* SUPPORT MODAL */}
       <Dialog open={showSupport} onOpenChange={setShowSupport}>
         <DialogContent className="bg-card border-border max-w-sm">
           <DialogHeader>
@@ -1047,10 +967,7 @@ export default function Home() {
           </DialogHeader>
 
           <div className="py-4">
-            <a
-              href="mailto:support@calshi.app"
-              className="block text-center font-mono text-primary text-lg font-bold hover:underline"
-            >
+            <a href="mailto:support@calshi.app" className="block text-center font-mono text-primary text-lg font-bold hover:underline">
               support@calshi.app
             </a>
           </div>
