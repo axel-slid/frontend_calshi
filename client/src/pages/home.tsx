@@ -154,7 +154,8 @@ function RulesModal({
                 1
               </div>
               <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Weekly Drop:</strong> New prompts are released every Sunday at 12:00 PM.
+                <strong className="text-foreground">Weekly Drop:</strong> New prompts are released every Sunday at 12:00 PM
+                PST.
               </p>
             </div>
             <div className="flex gap-3">
@@ -172,6 +173,14 @@ function RulesModal({
               </div>
               <p className="text-sm text-muted-foreground">
                 <strong className="text-foreground">Verification:</strong> Must sign in with a verified @berkeley.edu email.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center shrink-0 text-xs font-bold border">
+                4
+              </div>
+              <p className="text-sm text-muted-foreground">
+                <strong className="text-foreground">Contest End:</strong> Weekly contest ends Friday at 5:00 PM PST.
               </p>
             </div>
           </div>
@@ -195,7 +204,14 @@ function formatEndsAt(endsAtIso: string | null | undefined) {
   if (!endsAtIso) return "TBD";
   const d = new Date(endsAtIso);
   if (Number.isNaN(d.getTime())) return "TBD";
-  return d.toLocaleString();
+  return d.toLocaleString("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function adaptApiMarket(m: ApiMarketRow): Market {
@@ -322,25 +338,92 @@ function TradeButton({
   );
 }
 
-// Next Sunday at 12:00 PM local time
-function getNextSundayNoon(now: Date) {
-  const d = new Date(now);
-  const day = d.getDay(); // 0=Sun
-  const daysUntilSunday = (7 - day) % 7;
-  const next = new Date(d);
-  next.setDate(d.getDate() + daysUntilSunday);
-  next.setHours(12, 0, 0, 0);
+/**
+ * Returns the next Friday at 5:00 PM PST (America/Los_Angeles) in UTC milliseconds.
+ * If it's already past Friday 5 PM PST this week, returns next week's Friday 5 PM PST.
+ *
+ * We avoid relying on local browser timezone by using Intl timeZone conversions.
+ */
+function getNextFriday5pmPstUtcMs(now: Date) {
+  const tz = "America/Los_Angeles";
 
-  // If it's already Sunday and past noon, go to next week
-  if (day === 0 && d.getTime() >= next.getTime()) {
-    next.setDate(next.getDate() + 7);
-  }
-  // If it's not Sunday but the computed Sunday noon is in the past (edge), push a week
-  if (d.getTime() >= next.getTime()) {
-    next.setDate(next.getDate() + 7);
+  // Extract PST "date parts" for now
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+
+  const year = Number(get("year"));
+  const month = Number(get("month"));
+  const day = Number(get("day"));
+  const weekday = String(get("weekday")); // e.g., "Fri"
+  const hour = Number(get("hour"));
+  const minute = Number(get("minute"));
+
+  // Map weekday to 0..6 (Sun..Sat)
+  const wdMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const pstDow = wdMap[weekday] ?? 0;
+
+  // Calculate days until Friday (5)
+  let daysUntilFri = (5 - pstDow + 7) % 7;
+
+  // If today is Friday and it's already >= 17:00 PST, go to next week
+  if (pstDow === 5 && (hour > 17 || (hour === 17 && minute >= 0))) {
+    daysUntilFri = 7;
   }
 
-  return next;
+  // Build a PST-local date string for target Friday 17:00:00
+  // We create a "PST date" by adding days in PST calendar terms:
+  // Step 1: create a JS Date at current PST midnight by using the PST date parts as if UTC,
+  // then adjust with formatter to get the correct UTC moment. Easiest: iterate by days from "today" in UTC
+  // while using the PST date parts. Here we do a stable approach:
+  const basePstDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0)); // midday UTC to avoid DST edge
+  const targetPstMidday = new Date(basePstDate.getTime() + daysUntilFri * 24 * 60 * 60 * 1000);
+
+  // Extract target PST Y/M/D after adding days
+  const targetParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour12: false,
+  }).formatToParts(targetPstMidday);
+
+  const ty = Number(targetParts.find((p) => p.type === "year")?.value);
+  const tm = Number(targetParts.find((p) => p.type === "month")?.value);
+  const td = Number(targetParts.find((p) => p.type === "day")?.value);
+
+  // Now: find the UTC instant corresponding to ty-tm-td 17:00:00 in America/Los_Angeles
+  // We approximate by starting with UTC and then correcting using the timezone offset at that moment.
+  // Start with "17:00 UTC" placeholder, then use formatter to compute actual offset.
+  const approxUtc = new Date(Date.UTC(ty, tm - 1, td, 17, 0, 0));
+
+  // Compute PST clock time of approxUtc; if it's not 17:00 PST, adjust.
+  const clockParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(approxUtc);
+
+  const pstH = Number(clockParts.find((p) => p.type === "hour")?.value);
+  const pstM = Number(clockParts.find((p) => p.type === "minute")?.value);
+
+  // Difference between desired (17:00) and current PST clock time
+  const diffMinutes = (17 - pstH) * 60 + (0 - pstM);
+
+  const correctedUtc = new Date(approxUtc.getTime() + diffMinutes * 60 * 1000);
+  return correctedUtc.getTime();
 }
 
 function formatCountdown(ms: number) {
@@ -359,20 +442,34 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [showRules, setShowRules] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
 
   // Stake slider (global)
   const [stake, setStake] = useState(50);
 
-  // Live countdown
+  // Live time tick
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  const nextDrop = useMemo(() => getNextSundayNoon(now), [now]);
-  const msToDrop = nextDrop.getTime() - now.getTime();
-  const countdown = formatCountdown(msToDrop);
+  // Contest ends next Friday 5PM PST
+  const contestEndUtcMs = useMemo(() => getNextFriday5pmPstUtcMs(now), [now]);
+  const msToContestEnd = contestEndUtcMs - now.getTime();
+  const contestCountdown = formatCountdown(msToContestEnd);
+
+  const contestEndLabel = useMemo(() => {
+    return new Date(contestEndUtcMs).toLocaleString("en-US", {
+      timeZone: "America/Los_Angeles",
+      weekday: "short",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }, [contestEndUtcMs]);
 
   const meQuery = useQuery<ApiMeResponse>({
     queryKey: ["/me"],
@@ -564,6 +661,33 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-16">
+        {/* CONTEST COUNTDOWN BANNER */}
+        <section className="mb-10">
+          <Card className="p-5 border-primary/20 bg-primary/5 rounded-[1.75rem]">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Trophy className="h-5 w-5 text-primary mt-0.5" />
+                <div>
+                  <div className="text-xs font-black uppercase tracking-widest text-primary">
+                    Weekly Contest Ends
+                  </div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    Friday 5:00 PM PST • {contestEndLabel} PST
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  Time remaining
+                </div>
+                <div className="text-2xl font-black tabular-nums text-foreground">
+                  {contestCountdown}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </section>
+
         <section className="mb-12 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-12">
           <div className="max-w-2xl">
             <motion.div
@@ -640,10 +764,10 @@ export default function Home() {
                 </div>
 
                 <div className="pt-4 border-t border-primary/10">
-                  <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Next prompt drop</p>
-                  <p className="text-sm font-bold text-primary mt-1">{countdown}</p>
+                  <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Contest ends</p>
+                  <p className="text-sm font-bold text-primary mt-1">Friday • 5:00 PM PST</p>
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">
-                    Sunday • 12:00 PM (local)
+                    Remaining: {contestCountdown}
                   </p>
                 </div>
               </div>
@@ -727,7 +851,8 @@ export default function Home() {
               <div>
                 <h2 className="text-lg font-black uppercase tracking-widest text-foreground">This Week’s Markets</h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Updated live. Next weekly drop in <span className="font-bold text-foreground">{countdown}</span>.
+                  Updated live. Contest ends in{" "}
+                  <span className="font-bold text-foreground">{contestCountdown}</span> (Friday 5:00 PM PST).
                 </p>
               </div>
             </div>
@@ -754,7 +879,7 @@ export default function Home() {
                           {market.category}
                         </Badge>
                         <span className="text-[10px] text-muted-foreground font-black uppercase tracking-widest flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5" /> {market.endsAt}
+                          <Clock className="h-3.5 w-3.5" /> {market.endsAt} PST
                         </span>
                       </div>
                       <h3 className="text-xl font-bold text-foreground leading-snug mb-6 group-hover:text-primary transition-colors line-clamp-2 h-14">
@@ -880,7 +1005,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* UPDATED: wired to /leaderboard */}
               <Link href="/leaderboard">
                 <Button
                   variant="ghost"
@@ -903,15 +1027,19 @@ export default function Home() {
                 Verified Berkeley .edu only
               </p>
               <div className="flex gap-8 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
-                <a href="#" className="hover:text-primary transition-colors">
+                <a href="/privacy.txt" target="_blank" rel="noopener noreferrer">
                   Privacy Policy
                 </a>
-                  <a href="/privacy.txt" target="_blank" rel="noopener noreferrer">
-                    Privacy Policy
-                  </a>
-                  <a href="/terms.txt" target="_blank" rel="noopener noreferrer">
-                    Terms of Service
-                  </a>
+                <a href="/terms.txt" target="_blank" rel="noopener noreferrer">
+                  Terms of Service
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowSupport(true)}
+                  className="hover:text-primary transition-colors"
+                >
+                  Contact Support
+                </button>
               </div>
             </div>
           </div>
@@ -920,6 +1048,31 @@ export default function Home() {
           </p>
         </div>
       </footer>
+
+      {/* SUPPORT MODAL */}
+      <Dialog open={showSupport} onOpenChange={setShowSupport}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Contact Support</DialogTitle>
+            <DialogDescription>For help or questions, email us at:</DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <a
+              href="mailto:support@calshi.app"
+              className="block text-center font-mono text-primary text-lg font-bold hover:underline"
+            >
+              support@calshi.app
+            </a>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setShowSupport(false)} className="w-full">
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <RulesModal open={showRules} onOpenChange={setShowRules} />
     </div>
