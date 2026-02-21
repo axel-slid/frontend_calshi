@@ -11,6 +11,9 @@ import {
   Copy,
   ChevronRight,
   Mail,
+  ThumbsUp,
+  ThumbsDown,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -74,13 +77,26 @@ type ApiLeaderboardResponse = {
 
 type ApiInviteCodeResponse = { code: string } | null;
 
+/** ✅ Suggestions API types */
+type ApiSuggestion = {
+  id: string;
+  title: string;
+  details: string | null;
+  created_at: string;
+  score: number;
+  upvotes: number;
+  downvotes: number;
+  viewer_vote: -1 | 0 | 1;
+};
+type ApiSuggestionsResponse = { suggestions: ApiSuggestion[] };
+
 const typewriterWords = [
   "campus events.",
   "RSF capacity.",
   "weather shifts.",
   "YikYak trends.",
   "Sproul protests.",
-  "Berkeley."
+  "Berkeley.",
 ];
 
 const demoLeaders = [
@@ -230,19 +246,9 @@ function adaptApiMarket(m: ApiMarketRow): Market {
   const lowered = q.toLowerCase();
   let category: Market["category"] = "Campus";
   if (lowered.includes("rain") || lowered.includes("weather") || lowered.includes("temperature")) category = "Weather";
-  else if (
-    lowered.includes("cafe") ||
-    lowered.includes("dining") ||
-    lowered.includes("menu") ||
-    lowered.includes("boba")
-  )
+  else if (lowered.includes("cafe") || lowered.includes("dining") || lowered.includes("menu") || lowered.includes("boba"))
     category = "Dining";
-  else if (
-    lowered.includes("yik") ||
-    lowered.includes("anthem") ||
-    lowered.includes("sproul") ||
-    lowered.includes("protest")
-  )
+  else if (lowered.includes("yik") || lowered.includes("anthem") || lowered.includes("sproul") || lowered.includes("protest"))
     category = "Chaos";
 
   const yesRaw = m.yes_price;
@@ -434,7 +440,6 @@ function formatCountdown(ms: number) {
 }
 
 function formatContestEndLabel(utcMs: number) {
-  // Example: "Fri, Feb 27 · 5:00 PM PST"
   const d = new Date(utcMs);
   const tz = "America/Los_Angeles";
 
@@ -609,6 +614,96 @@ export default function Home() {
     }
   }
 
+  /** ✅ Suggestions state */
+  const [suggestTitle, setSuggestTitle] = useState("");
+  const [suggestDetails, setSuggestDetails] = useState("");
+  const [showSuggestDialog, setShowSuggestDialog] = useState(false);
+
+  /** ✅ Suggestions query */
+  const suggestionsQuery = useQuery<ApiSuggestionsResponse>({
+    queryKey: ["/markets/suggestions"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    refetchInterval: 15_000,
+  });
+
+  const suggestions: ApiSuggestion[] = useMemo(() => {
+    return (suggestionsQuery.data as any)?.suggestions ?? [];
+  }, [suggestionsQuery.data]);
+
+  const createSuggestionMutation = useMutation({
+    mutationFn: async (input: { title: string; details?: string }) => {
+      const res = await apiRequest("POST", "/markets/suggestions", input);
+      return await res.json();
+    },
+    onSuccess: async () => {
+      setSuggestTitle("");
+      setSuggestDetails("");
+      setShowSuggestDialog(false);
+      toast({ title: "Suggestion submitted" });
+      await queryClient.invalidateQueries({ queryKey: ["/markets/suggestions"] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Could not submit",
+        description: typeof e?.message === "string" ? e.message : "Try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const voteSuggestionMutation = useMutation({
+    mutationFn: async (input: { id: string; value: -1 | 0 | 1 }) => {
+      const res = await apiRequest("POST", `/markets/suggestions/${input.id}/vote`, { value: input.value });
+      return await res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/markets/suggestions"] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Vote failed",
+        description: typeof e?.message === "string" ? e.message : "Try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  function shortDate(iso: string) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("en-US", {
+      timeZone: "America/Los_Angeles",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  async function handleCreateSuggestion() {
+    if (!signedIn) {
+      setLocation("/auth");
+      return;
+    }
+    const title = suggestTitle.trim();
+    const details = suggestDetails.trim();
+    if (title.length < 6) {
+      toast({ title: "Title too short", description: "Write a clearer market question.", variant: "destructive" });
+      return;
+    }
+    await createSuggestionMutation.mutateAsync({ title, details });
+  }
+
+  async function handleVoteSuggestion(s: ApiSuggestion, next: -1 | 1) {
+    if (!signedIn) {
+      setLocation("/auth");
+      return;
+    }
+    // clicking same vote again removes vote
+    const value: -1 | 0 | 1 = s.viewer_vote === next ? 0 : next;
+    await voteSuggestionMutation.mutateAsync({ id: s.id, value });
+  }
+
   return (
     <div className="min-h-screen bg-background bg-grid">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
@@ -623,15 +718,11 @@ export default function Home() {
             {signedIn ? (
               <>
                 <div className="flex items-center gap-4">
-                  {/* Not a button anymore */}
                   <div className="select-none leading-tight">
                     <div className="text-sm font-black text-foreground">{username}</div>
-                    <div className="text-xs font-bold text-muted-foreground">
-                      {tokens.toLocaleString()} credits
-                    </div>
+                    <div className="text-xs font-bold text-muted-foreground">{tokens.toLocaleString()} credits</div>
                   </div>
 
-                  {/* Only button */}
                   <Button
                     className="h-11 rounded-full bg-primary hover:bg-primary/90 text-white font-black px-6"
                     onClick={() => setLocation("/portfolio")}
@@ -670,7 +761,6 @@ export default function Home() {
                 <Trophy className="h-5 w-5 text-primary mt-0.5" />
                 <div>
                   <div className="text-xs font-black uppercase tracking-widest text-primary">Weekly Contest Ends</div>
-                  {/* No redundancy: single formatted label */}
                   <div className="text-sm text-muted-foreground mt-1">{contestEndLabel}</div>
                 </div>
               </div>
@@ -680,11 +770,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Bottom additions */}
             <div className="mt-4 pt-4 border-t border-border/50">
-              <div className="text-sm text-muted-foreground">
-                DM us for suggestions on Berkeley markets.
-              </div>
+              <div className="text-sm text-muted-foreground">DM us for suggestions on Berkeley markets.</div>
               <div className="mt-1 text-[11px] leading-snug text-muted-foreground/70">
                 *Competition prize only valid if 100 users participate.
               </div>
@@ -740,7 +827,11 @@ export default function Home() {
             )}
           </div>
 
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="hidden lg:block w-full max-w-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="hidden lg:block w-full max-w-sm"
+          >
             <Card className="p-8 border-primary/20 bg-primary/5 rounded-[2.5rem] relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4">
                 <Shield className="h-8 w-8 text-primary/20" />
@@ -750,12 +841,16 @@ export default function Home() {
 
               <div className="space-y-6">
                 <div>
-                  <p className="text-3xl font-black">{statsQuery.isLoading ? "—" : activeTokensStaked.toLocaleString()}</p>
+                  <p className="text-3xl font-black">
+                    {statsQuery.isLoading ? "—" : activeTokensStaked.toLocaleString()}
+                  </p>
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Active Tokens Staked</p>
                 </div>
 
                 <div>
-                  <p className="text-3xl font-black">{statsQuery.isLoading ? "—" : dailyForecasters.toLocaleString()}</p>
+                  <p className="text-3xl font-black">
+                    {statsQuery.isLoading ? "—" : dailyForecasters.toLocaleString()}
+                  </p>
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Daily Forecasters</p>
                 </div>
 
@@ -807,13 +902,31 @@ export default function Home() {
                 </div>
 
                 <div className="flex gap-2 mt-3">
-                  <Button type="button" variant="outline" className="h-9 px-3 rounded-xl border-border" disabled={!signedIn} onClick={() => setStake(10)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-3 rounded-xl border-border"
+                    disabled={!signedIn}
+                    onClick={() => setStake(10)}
+                  >
                     10
                   </Button>
-                  <Button type="button" variant="outline" className="h-9 px-3 rounded-xl border-border" disabled={!signedIn} onClick={() => setStake(50)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-3 rounded-xl border-border"
+                    disabled={!signedIn}
+                    onClick={() => setStake(50)}
+                  >
                     50
                   </Button>
-                  <Button type="button" variant="outline" className="h-9 px-3 rounded-xl border-border ml-auto" disabled={!signedIn} onClick={() => setStake(maxStakeForSlider)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-3 rounded-xl border-border ml-auto"
+                    disabled={!signedIn}
+                    onClick={() => setStake(maxStakeForSlider)}
+                  >
                     Max
                   </Button>
                 </div>
@@ -828,7 +941,8 @@ export default function Home() {
               <div>
                 <h2 className="text-lg font-black uppercase tracking-widest text-foreground">This Week’s Markets</h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Updated live. Contest ends in <span className="font-bold text-foreground">{contestCountdown}</span> (Friday 5:00 PM PST).
+                  Updated live. Contest ends in{" "}
+                  <span className="font-bold text-foreground">{contestCountdown}</span> (Friday 5:00 PM PST).
                 </p>
               </div>
             </div>
@@ -901,7 +1015,9 @@ export default function Home() {
                             <DialogHeader>
                               <DialogTitle>Resolution Details</DialogTitle>
                             </DialogHeader>
-                            <div className="py-4 text-sm text-muted-foreground leading-relaxed">{market.detailedRules}</div>
+                            <div className="py-4 text-sm text-muted-foreground leading-relaxed">
+                              {market.detailedRules}
+                            </div>
                           </DialogContent>
                         </Dialog>
                       </div>
@@ -909,6 +1025,98 @@ export default function Home() {
                   </Card>
                 ))
               )}
+            </div>
+
+            {/* ✅ NEW: Suggestions section (this is what you were missing) */}
+            <div className="pt-10">
+              <div className="flex items-end justify-between gap-4 border-b border-border pb-4">
+                <div>
+                  <h2 className="text-lg font-black uppercase tracking-widest text-foreground">Market Suggestions</h2>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Post an idea anonymously. Others can upvote / downvote.
+                  </p>
+                </div>
+
+                <Button
+                  className="h-10 rounded-xl font-black"
+                  onClick={() => {
+                    if (!signedIn) {
+                      setLocation("/auth");
+                      return;
+                    }
+                    setShowSuggestDialog(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Suggest
+                </Button>
+              </div>
+
+              <div className="pt-6 space-y-4">
+                {suggestionsQuery.isLoading ? (
+                  <Card className="p-6">Loading suggestions…</Card>
+                ) : suggestionsQuery.isError ? (
+                  <Card className="p-6">
+                    Could not load suggestions.{" "}
+                    <span className="text-muted-foreground text-sm">{(suggestionsQuery.error as any)?.message ?? ""}</span>
+                  </Card>
+                ) : suggestions.length === 0 ? (
+                  <Card className="p-6">
+                    No suggestions yet. Be the first to post one.
+                  </Card>
+                ) : (
+                  suggestions.map((s) => {
+                    const upActive = s.viewer_vote === 1;
+                    const downActive = s.viewer_vote === -1;
+
+                    return (
+                      <Card key={s.id} className="p-5 rounded-[1.25rem] border-border bg-secondary/10">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <div className="text-sm font-black text-foreground line-clamp-2">{s.title}</div>
+                            {s.details ? (
+                              <div className="mt-2 text-sm text-muted-foreground leading-relaxed line-clamp-3">
+                                {s.details}
+                              </div>
+                            ) : null}
+                            <div className="mt-3 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
+                              {shortDate(s.created_at)} • score {Number(s.score ?? 0)}
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex flex-col items-end gap-2">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant={upActive ? undefined : "outline"}
+                                className={`h-10 w-10 rounded-xl p-0 ${upActive ? "bg-primary text-white" : "border-border"}`}
+                                disabled={voteSuggestionMutation.isPending}
+                                onClick={() => handleVoteSuggestion(s, 1)}
+                                title="Upvote"
+                              >
+                                <ThumbsUp className="h-4 w-4" />
+                              </Button>
+
+                              <Button
+                                variant={downActive ? undefined : "outline"}
+                                className={`h-10 w-10 rounded-xl p-0 ${downActive ? "bg-primary text-white" : "border-border"}`}
+                                disabled={voteSuggestionMutation.isPending}
+                                onClick={() => handleVoteSuggestion(s, -1)}
+                                title="Downvote"
+                              >
+                                <ThumbsDown className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            <div className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
+                              {Number(s.upvotes ?? 0)} up • {Number(s.downvotes ?? 0)} down
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
 
@@ -961,7 +1169,9 @@ export default function Home() {
                       <span className="text-xs font-black text-muted-foreground w-4">#{i + 1}</span>
                       <span className="font-bold text-sm">{leader.name}</span>
                     </div>
-                    <span className="font-mono text-xs font-black text-primary">{Number(leader.tokens ?? 0).toLocaleString()}</span>
+                    <span className="font-mono text-xs font-black text-primary">
+                      {Number(leader.tokens ?? 0).toLocaleString()}
+                    </span>
                   </div>
                 ))}
 
@@ -990,7 +1200,9 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-10">
             <img src="/static/logo.png" alt="Calshi" className="h-10 w-auto opacity-80 brightness-110" />
             <div className="flex flex-col items-center md:items-end gap-4">
-              <p className="text-xs font-black text-muted-foreground uppercase tracking-[0.3em]">Verified Berkeley .edu only</p>
+              <p className="text-xs font-black text-muted-foreground uppercase tracking-[0.3em]">
+                Verified Berkeley .edu only
+              </p>
               <div className="flex gap-8 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
                 <a href="/privacy.txt" target="_blank" rel="noopener noreferrer">
                   Privacy Policy
@@ -998,7 +1210,11 @@ export default function Home() {
                 <a href="/terms.txt" target="_blank" rel="noopener noreferrer">
                   Terms of Service
                 </a>
-                <button type="button" onClick={() => setShowSupport(true)} className="hover:text-primary transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setShowSupport(true)}
+                  className="hover:text-primary transition-colors"
+                >
                   Contact Support
                 </button>
               </div>
@@ -1018,7 +1234,10 @@ export default function Home() {
           </DialogHeader>
 
           <div className="py-4">
-            <a href="mailto:support@calshi.app" className="block text-center font-mono text-primary text-lg font-bold hover:underline">
+            <a
+              href="mailto:support@calshi.app"
+              className="block text-center font-mono text-primary text-lg font-bold hover:underline"
+            >
               support@calshi.app
             </a>
           </div>
@@ -1026,6 +1245,53 @@ export default function Home() {
           <DialogFooter>
             <Button onClick={() => setShowSupport(false)} className="w-full">
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ Suggestion modal */}
+      <Dialog open={showSuggestDialog} onOpenChange={setShowSuggestDialog}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Suggest a market</DialogTitle>
+            <DialogDescription>
+              This will appear anonymously to other users. Keep it short and specific.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div>
+              <div className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Title</div>
+              <Input
+                value={suggestTitle}
+                onChange={(e) => setSuggestTitle(e.target.value)}
+                placeholder="e.g., Will RSF reach full capacity before Wednesday?"
+                className="h-12 rounded-xl"
+              />
+            </div>
+
+            <div>
+              <div className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Details (optional)</div>
+              <textarea
+                value={suggestDetails}
+                onChange={(e) => setSuggestDetails(e.target.value)}
+                placeholder="Any resolution details / data source / timing notes…"
+                className="w-full min-h-[110px] rounded-xl border border-border bg-secondary/30 p-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-xl" onClick={() => setShowSuggestDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="rounded-xl font-black"
+              disabled={createSuggestionMutation.isPending}
+              onClick={handleCreateSuggestion}
+            >
+              {createSuggestionMutation.isPending ? "Submitting…" : "Submit"}
             </Button>
           </DialogFooter>
         </DialogContent>
