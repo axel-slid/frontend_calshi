@@ -22,9 +22,10 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [idToken, setIdToken] = useState<string | null>(null);
   const [username, setUsername] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // NEW: only show username form when backend says it's needed
+  // only show username form when backend says it's needed
   const [needsUsername, setNeedsUsername] = useState(false);
 
   async function finishLoginAndEnter(data: any) {
@@ -38,7 +39,6 @@ export default function AuthPage() {
   async function handleGoogleToken(token: string) {
     setIsSubmitting(true);
     try {
-      // 1) Ask backend if this user already exists / can be signed in
       const res = await fetch(`${API_BASE}/auth/google`, {
         method: "POST",
         credentials: "include",
@@ -51,14 +51,11 @@ export default function AuthPage() {
         data = await res.json();
       } catch {}
 
-      if (!res.ok) {
-        throw new Error(data?.error || `HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
       const serverEmail = (data?.user?.email ?? "").toString();
       const serverUsername = (data?.user?.username ?? "").toString().trim();
 
-      // UX: show actual email from server (not "Signed in with Google")
       setEmail(serverEmail || "Signed in with Google");
 
       // If username already exists -> let them in immediately
@@ -115,6 +112,7 @@ export default function AuthPage() {
         body: JSON.stringify({
           idToken,
           username: trimmedUsername,
+          referralCode: referralCode.trim() || undefined,
         }),
       });
 
@@ -124,6 +122,17 @@ export default function AuthPage() {
       } catch {}
 
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      // Optional: show referral result (does not block signup)
+      if (data?.referral?.ok === true) {
+        toast({ title: "Invite accepted", description: "Referral applied successfully." });
+      } else if (data?.referral?.ok === false) {
+        toast({
+          title: "Invite not applied",
+          description: (data?.referral?.error ?? "Could not redeem invite code").toString(),
+          variant: "destructive",
+        });
+      }
 
       await finishLoginAndEnter(data);
     } catch (e: any) {
@@ -170,7 +179,6 @@ export default function AuthPage() {
                       });
                       return;
                     }
-                    // ✅ NEW: call backend immediately
                     handleGoogleToken(token);
                   }}
                   onError={() => {
@@ -210,6 +218,23 @@ export default function AuthPage() {
                       autoComplete="username"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="referral">Invite Code (optional)</Label>
+                  <Input
+                    id="referral"
+                    placeholder="CAL-XXXXXXXX"
+                    className="h-12 bg-card/50 font-mono"
+                    value={referralCode}
+                    onChange={(e) => setReferralCode(e.target.value)}
+                    disabled={isSubmitting}
+                    autoComplete="off"
+                    inputMode="text"
+                  />
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest pl-1">
+                    If you have one from a friend
+                  </p>
                 </div>
 
                 <Button
