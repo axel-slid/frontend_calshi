@@ -906,12 +906,12 @@ export default function Home() {
                 <a href="#" className="hover:text-primary transition-colors">
                   Privacy Policy
                 </a>
-                <a href="#" className="hover:text-primary transition-colors">
-                  Terms of Service
-                </a>
-                <a href="#" className="hover:text-primary transition-colors">
-                  Contact Support
-                </a>
+                  <a href="/privacy.txt" target="_blank" rel="noopener noreferrer">
+                    Privacy Policy
+                  </a>
+                  <a href="/terms.txt" target="_blank" rel="noopener noreferrer">
+                    Terms of Service
+                  </a>
               </div>
             </div>
           </div>

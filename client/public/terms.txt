@@ -1,0 +1,134 @@
+TERMS OF SERVICE
+Last updated: February 2026
+
+These Terms of Service (“Terms”) govern your access to and use of Calshi (“Calshi”, “we”, “us”, or “our”).
+
+By accessing or using the Service, you agree to be bound by these Terms.
+
+--------------------------------------------------
+1. NATURE OF THE SERVICE
+--------------------------------------------------
+
+Calshi is a free, play-money forecasting competition provided for entertainment and educational purposes only.
+
+- No real money is wagered
+- Tokens have no monetary value
+- No gambling, financial, or securities services are offered
+
+--------------------------------------------------
+2. ELIGIBILITY
+--------------------------------------------------
+
+To use the Service, you must:
+- Be at least 18 years old
+- Possess a valid .edu email address
+- Provide accurate and truthful information
+
+We reserve the right to suspend or terminate accounts that do not meet eligibility requirements.
+
+--------------------------------------------------
+3. ACCOUNTS AND AUTHENTICATION
+--------------------------------------------------
+
+You are responsible for maintaining the confidentiality of your account.
+
+You may not:
+- Share accounts
+- Impersonate another person
+- Circumvent authentication mechanisms
+
+You are responsible for all activity under your account.
+
+--------------------------------------------------
+4. TOKENS AND GAMEPLAY
+--------------------------------------------------
+
+- Tokens are virtual and have no cash value
+- Tokens cannot be redeemed, transferred, or exchanged for money
+- Token balances and leaderboard rankings may be modified, reset, or revoked at any time
+- Rankings are informational only and not guaranteed
+
+--------------------------------------------------
+5. REFERRAL PROGRAM
+--------------------------------------------------
+
+Referral rewards consist solely of virtual tokens.
+
+We reserve the right to modify, limit, suspend, or terminate referral programs at any time.
+
+Abuse, manipulation, or fraud may result in forfeiture of rewards and account termination.
+
+--------------------------------------------------
+6. PROHIBITED CONDUCT
+--------------------------------------------------
+
+You agree not to:
+- Violate any applicable law or regulation
+- Exploit bugs, loopholes, or system errors
+- Manipulate markets or leaderboards unfairly
+- Use bots, scripts, or automated systems
+- Attempt unauthorized access to the Service
+- Harass, abuse, or harm other users
+
+--------------------------------------------------
+7. INTELLECTUAL PROPERTY
+--------------------------------------------------
+
+All content, software, and branding associated with Calshi are owned by or licensed to us.
+
+You may not copy, modify, distribute, or reverse engineer any portion of the Service without prior permission.
+
+--------------------------------------------------
+8. TERMINATION
+--------------------------------------------------
+
+We may suspend or terminate your account at any time, with or without notice, for any reason.
+
+You may stop using the Service at any time.
+
+--------------------------------------------------
+9. DISCLAIMERS
+--------------------------------------------------
+
+THE SERVICE IS PROVIDED “AS IS” AND “AS AVAILABLE”.
+
+WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+--------------------------------------------------
+10. LIMITATION OF LIABILITY
+--------------------------------------------------
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW:
+
+CALSHI SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.
+
+TOTAL LIABILITY SHALL NOT EXCEED $0 USD.
+
+--------------------------------------------------
+11. INDEMNIFICATION
+--------------------------------------------------
+
+You agree to indemnify and hold harmless Calshi from any claims or damages arising from:
+- Your use of the Service
+- Your violation of these Terms
+- Your violation of any rights of another party
+
+--------------------------------------------------
+12. GOVERNING LAW
+--------------------------------------------------
+
+These Terms are governed by the laws of the State of California, without regard to conflict-of-law principles.
+
+--------------------------------------------------
+13. CHANGES TO TERMS
+--------------------------------------------------
+
+We may update these Terms at any time. Continued use of the Service constitutes acceptance of updated Terms.
+
+--------------------------------------------------
+14. CONTACT
+--------------------------------------------------
+
+Questions about these Terms should be sent to:
+
+support@calshi.app
