@@ -309,7 +309,6 @@ function TradeButton({
 }) {
   const pct = Math.round(clamp01(price) * 100);
   const payout = calcPayout(stake, price);
-  const profit = payout == null ? null : payout - stake;
 
   const primaryClasses =
     variant === "yes"
@@ -349,11 +348,6 @@ function TradeButton({
           ) : (
             <>
               Stake {formatInt(stake)} → Payout {formatInt(payout)}
-              {profit != null && profit > 0 ? (
-                <span className={variant === "yes" ? "ml-2 text-white" : "ml-2 text-foreground"}>
-                  (+{formatInt(profit)})
-                </span>
-              ) : null}
             </>
           )}
         </div>
